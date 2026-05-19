@@ -1,0 +1,109 @@
+name: 🐳 Smoke Test
+
+on:
+  workflow_call:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python (para tests)
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies for tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          pip install pyyaml
+          pip install -r requirements.txt
+
+      - name: Run Test
+        run: |
+          pytest test/ -v
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
+
+      - name: Copiar .env.example como .env
+        run: cp .env.example .env
+
+      - name: Ensure external docker networks exist
+        run: |
+          mapfile -t networks < <(python - <<'PY'
+          import yaml
+
+          with open("compose.yaml", "r", encoding="utf-8") as handle:
+              data = yaml.safe_load(handle) or {}
+
+          networks = data.get("networks", {}) or {}
+          external = []
+          for net_name, net_cfg in networks.items():
+              if isinstance(net_cfg, dict) and net_cfg.get("external") is True:
+                  external.append(net_cfg.get("name") or net_name)
+
+          for name in external:
+              print(name)
+          PY
+          )
+
+          for net in "${networks[@]}"; do
+            if [ -n "$net" ]; then
+              docker network inspect "$net" >/dev/null 2>&1 || docker network create "$net"
+            fi
+          done
+
+      - name: Start Docker Compose in detached mode
+        run: |
+          docker compose -f compose.yaml -f compose.test.yaml up --build -d
+
+      - name: Test endpoint raíz con curl
+        run: |
+          sleep 5  # Espera a que el contenedor esté listo
+          curl -f http://localhost:3000/ || (docker-compose logs && exit 1)
+
+      - name: Test endpoint /sample con autenticación
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X GET http://localhost:3000/sample \
+            -H "Authorization: Bearer sample" \
+            -H "Content-Type: application/json" \
+            -d '{"username":"testuser","password":"testpass"}')
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          echo "HTTP Code: $http_code"
+          echo "Response: $body"
+          # Verificar que devuelve 200 (OK)
+          if [ "$http_code" != "200" ]; then
+            echo "❌ Error: Se esperaba código 200, pero se obtuvo $http_code"
+            docker-compose logs
+            exit 1
+          fi
+          echo "✅ Test de /sample pasado correctamente (código: 200)"
+
+      - name: Test endpoint /test con autenticación (Controller Test)
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST http://localhost:3000/test \
+            -H "Authorization: Bearer sample" \
+            -H "Content-Type: application/json" \
+            -d '{"browsers":["chrome"],"test_search":false,"test_writes":false,"screenshots":true}')
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          echo "HTTP Code: $http_code"
+          echo "Response: $body"
+          # Verificar que devuelve 200 (OK)
+          if [ "$http_code" != "200" ]; then
+            echo "❌ Error: Se esperaba código 200, pero se obtuvo $http_code"
+            docker-compose logs
+            exit 1
+          fi
+          echo "✅ Test de /test (Controller Test) pasado correctamente (código: 200)"
+
+      - name: Stop Docker Compose
+        run: |
+          docker compose -f compose.yaml -f compose.test.yaml down
