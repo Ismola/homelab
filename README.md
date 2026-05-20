@@ -171,7 +171,7 @@ Este es el comportamiento esperado para los subdominios de `ismola.dev`.
 ```mermaid
 flowchart TD
 	Query[Consulta DNS de algo.ismola.dev]
-	Split{Es plex, immich u opencloud?}
+	Split{Es un servicio al que quiero acceder por Tailscale? ej: plex (mayor velocidad en la red local)}
 	PiHole[Pi-hole del NAS]
 	NPM[NPM del NAS]
 	LocalService[Servicio local correspondiente]
@@ -189,7 +189,7 @@ flowchart TD
 ### Acceso local
 
 - Todos los nodos son accesibles dentro de la red privada mediante Tailscale.
-- Los tres hostnames con Split DNS entran por el NAS y por NPM.
+- Los servicios con Split DNS entran por el NAS y por NPM.
 - El resto de servicios pueden seguir accediéndose por Tailscale usando IP, MagicDNS o la forma local que definas para cada nodo.
 
 ### Acceso público
@@ -197,20 +197,3 @@ flowchart TD
 - Los servicios públicos entran por Cloudflare.
 - Cloudflare Tunnel entrega el tráfico al nodo que aloja el servicio.
 - Ese nodo puede ser el NAS, `v1`, `v2`, `v3` o `v4`.
-
-## Decisiones Operativas Importantes
-
-1. No usar Split DNS para toda la zona `ismola.dev`.
-2. No crear un wildcard local tipo `*.ismola.dev` en Pi-hole si quieres mantener subdominios publicados fuera del NAS.
-3. Mantener el Split DNS limitado a `plex.ismola.dev`, `immich.ismola.dev` y `opencloud.ismola.dev`.
-4. Usar Cloudflare como capa pública común para todos los servicios expuestos a Internet.
-5. Usar Tailscale como red privada común entre NAS y VPS.
-
-## Siguiente Nivel De Documentación
-
-Esta base ya deja claros los diagramas y la topología. A partir de aquí, la siguiente documentación natural sería separar:
-
-1. Inventario de servicios por nodo.
-2. Política de DNS y subdominios.
-3. Flujo de publicación de un servicio nuevo.
-4. Operaciones de NPM, Pi-hole, Tailscale y Cloudflare.
