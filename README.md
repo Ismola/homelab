@@ -1,45 +1,216 @@
-# Starter Repository
+# Infraestructura De Red Y Servidores
 
-Este repositorio es una base para arrancar proyectos nuevos con una configuracion lista para desarrollo en contenedor y despliegue de imagenes Docker.
+Esta documentación se reinicia desde cero y describe la topología actual de la infraestructura.
 
-Incluye:
+El objetivo es tener una base clara para reconstruir la red, los servidores y las rutas de acceso privadas y públicas.
 
-- Devcontainer generico con Docker-in-Docker (DinD).
-- Workflow de Docker publish que sube imagenes automaticamente a GHCR.
-- Ejemplos de `docker-compose` y `Dockerfile` para iniciar rapido.
+## Resumen
 
-La idea es usar este repo como punto de partida: agregas tu stack (Node, Python, etc.), montas tus servicios de apoyo con Docker, y dejas que el pipeline publique la imagen de tu app.
+- Hay 4 VPS en la nube: `v1`, `v2`, `v3` y `v4`.
+- `v1`, `v2` y `v3` están en Oracle Cloud.
+- `v4` está en Google Cloud.
+- Todas las VPS tienen Tailscale.
+- El NAS local también tiene Tailscale.
+- En el NAS corren además Pi-hole y Nginx Proxy Manager.
+- Todas las VPS corren servicios accesibles en local por Tailscale y en público por Cloudflare Tunnel.
+- Solo `plex.ismola.dev`, `immich.ismola.dev` y `opencloud.ismola.dev` usan Split DNS.
 
-## Que trae este starter
+## Inventario De Nodos
 
-- Devcontainer: [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json)
- 	- Base Debian Bullseye.
- 	- Feature de Docker-in-Docker habilitada.
- 	- Preparado para ejecutar `docker` dentro del entorno de desarrollo.
-- Deploy workflow: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
- 	- Ejecuta en push a `main`.
- 	- Llama al workflow de publish.
-- Docker publish workflow: [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)
- 	- Construye y publica imagen multi-arquitectura (`amd64`, `arm64`) en `ghcr.io/<owner>/<repo>`.
+| Nodo | Ubicación / proveedor | CPU | RAM | Componentes base | Notas |
+|------|------------------------|-----|-----|------------------|-------|
+| `nas` | Local | No documentado aquí | No documentado aquí | Tailscale, Pi-hole, NPM | Entrada local de los servicios con Split DNS |
+| `v1` | Oracle Cloud | 1 vCPU | 1 GB | Tailscale, servicios | VPS general |
+| `v2` | Oracle Cloud | 1 vCPU | 1 GB | Tailscale, servicios | VPS general |
+| `v3` | Oracle Cloud ARM | 4 vCPU | 24 GB | Tailscale, servicios | Nodo con más capacidad |
+| `v4` | Google Cloud | 1 vCPU | 1 GB | Tailscale, servicios | VPS general |
 
-## Archivos de ejemplo
+## Principios De Diseño
 
-- Compose de ejemplo: [`samples/docker-compose.sample.yml`](samples/docker-compose.sample.yml)
-- Dockerfile de ejemplo: [`samples/Dockerfile.sample`](samples/Dockerfile.sample)
+1. Todos los nodos forman parte de la misma tailnet de Tailscale.
+2. Toda la exposición pública de servicios pasa por Cloudflare Tunnel.
+3. El NAS actúa como punto de entrada local para los servicios con Split DNS.
+4. Pi-hole resuelve los hostnames privados que deben entrar por el NAS.
+5. Nginx Proxy Manager enruta localmente por hostname hacia el servicio correcto.
+6. Solo tres hostnames usan Split DNS: `plex.ismola.dev`, `immich.ismola.dev` y `opencloud.ismola.dev`.
+7. El resto de subdominios de `ismola.dev` deben seguir entrando por Cloudflare si no se añaden explícitamente al DNS privado.
 
-Estos archivos son solo referencia. Puedes copiarlos/adaptarlos a:
+## Alcance Del Split DNS
 
-- `docker-compose.yml` para servicios de apoyo (db, cache, etc.).
-- `Dockerfile` para la aplicacion principal.
+El Split DNS no aplica a toda la zona `ismola.dev`.
 
-## Flujo recomendado
+Aplica solo a estos hostnames:
 
-1. Abre el proyecto en el devcontainer.
-2. Instala el runtime de tu proyecto (Node, Python, etc.).
-3. Levanta servicios auxiliares con Docker (`docker compose up -d`).
-4. Desarrolla tu aplicacion.
-5. Haz push a `main` y el workflow publicara la imagen automaticamente.
+- `plex.ismola.dev`
+- `immich.ismola.dev`
+- `opencloud.ismola.dev`
 
-## Nota sobre servicios en desarrollo
+Esto implica que:
 
-Si tu proyecto necesita servicios adicionales (por ejemplo PostgreSQL, Redis, RabbitMQ), la idea de este starter es correrlos tambien con Docker desde el mismo entorno del devcontainer, aparte del servicio principal que estes programando.
+- Un cliente con Tailscale que consulte uno de esos tres nombres debe entrar por la ruta local del NAS.
+- Un cliente con Tailscale que consulte otros subdominios de `ismola.dev` debe seguir resolviendo por Cloudflare, salvo que se configure lo contrario.
+
+## Diagrama 1. Mapa Global De Infraestructura
+
+```mermaid
+flowchart TB
+	UserInternet[Clientes]
+	CFDNS[Cloudflare DNS]
+	CFTunnel[Cloudflare Tunnel]
+	Tailnet[Tailscale Tailnet]
+
+	subgraph Local[Entorno local]
+		NAS[NAS\nTailscale\nPi-hole\nNPM]
+	end
+
+	subgraph Oracle[Oracle Cloud]
+		V1[v1\n1 vCPU\n1 GB RAM\nServicios]
+		V2[v2\n1 vCPU\n1 GB RAM\nServicios]
+		V3[v3\n4 vCPU ARM\n24 GB RAM\nServicios]
+	end
+
+	subgraph Google[Google Cloud]
+		V4[v4\n1 vCPU\n1 GB RAM\nServicios]
+	end
+
+	UserInternet --> CFDNS --> CFTunnel
+
+	Tailnet --- NAS
+	Tailnet --- V1
+	Tailnet --- V2
+	Tailnet --- V3
+	Tailnet --- V4
+
+	CFTunnel --> NAS
+	CFTunnel --> V1
+	CFTunnel --> V2
+	CFTunnel --> V3
+	CFTunnel --> V4
+```
+
+## Diagrama 2. Vista De Servidores
+
+```mermaid
+flowchart LR
+	subgraph NASLocal[NAS local]
+		PiHole[Pi-hole]
+		NPM[Nginx Proxy Manager]
+		NASServices[Servicios locales\nPlex\nImmich\nOpenCloud\nOtros]
+		NPM --> NASServices
+	end
+
+	subgraph OracleCloud[Oracle Cloud]
+		V1Srv[v1\n1 vCPU / 1 GB]
+		S1[Servicios v1]
+		V2Srv[v2\n1 vCPU / 1 GB]
+		S2[Servicios v2]
+		V3Srv[v3\n4 vCPU ARM / 24 GB]
+		S3[Servicios v3]
+		V1Srv --> S1
+		V2Srv --> S2
+		V3Srv --> S3
+	end
+
+	subgraph GoogleCloud[Google Cloud]
+		V4Srv[v4\n1 vCPU / 1 GB]
+		S4[Servicios v4]
+		V4Srv --> S4
+	end
+```
+
+## Diagrama 3. Ruta Pública De Acceso
+
+Todas las VPS y el NAS pueden publicar servicios de forma pública por Cloudflare Tunnel.
+
+```mermaid
+flowchart LR
+	PublicClient[Cliente sin Tailscale]
+	CFDNS[Cloudflare DNS]
+	CFTunnel[Cloudflare Tunnel]
+	Target{Destino del servicio}
+	NAS[NAS]
+	V1[v1]
+	V2[v2]
+	V3[v3]
+	V4[v4]
+
+	PublicClient --> CFDNS --> CFTunnel --> Target
+	Target --> NAS
+	Target --> V1
+	Target --> V2
+	Target --> V3
+	Target --> V4
+```
+
+## Diagrama 4. Ruta Privada Con Split DNS
+
+Solo `plex.ismola.dev`, `immich.ismola.dev` y `opencloud.ismola.dev` siguen esta ruta.
+
+```mermaid
+flowchart LR
+	TSClient[Cliente con Tailscale]
+	SplitDNS[Tailscale Split DNS]
+	PiHole[Pi-hole en NAS]
+	NPM[NPM en NAS]
+	Plex[Plex]
+	Immich[Immich]
+	OpenCloud[OpenCloud]
+
+	TSClient -->|Consulta DNS| SplitDNS --> PiHole
+	PiHole -->|Responde con IP privada del NAS| TSClient
+	TSClient -->|HTTPS al hostname| NPM
+	NPM --> Plex
+	NPM --> Immich
+	NPM --> OpenCloud
+```
+
+## Diagrama 5. Decisión De Resolución DNS
+
+Este es el comportamiento esperado para los subdominios de `ismola.dev`.
+
+```mermaid
+flowchart TD
+	Query[Consulta DNS de algo.ismola.dev]
+	Split{Es plex, immich u opencloud?}
+	PiHole[Pi-hole del NAS]
+	NPM[NPM del NAS]
+	LocalService[Servicio local correspondiente]
+	CFDNS[Cloudflare DNS]
+	CFTunnel[Cloudflare Tunnel]
+	RemoteTarget[Servicio publicado en NAS, v1, v2, v3 o v4]
+
+	Query --> Split
+	Split -->|Sí| PiHole --> NPM --> LocalService
+	Split -->|No| CFDNS --> CFTunnel --> RemoteTarget
+```
+
+## Modelo De Acceso
+
+### Acceso local
+
+- Todos los nodos son accesibles dentro de la red privada mediante Tailscale.
+- Los tres hostnames con Split DNS entran por el NAS y por NPM.
+- El resto de servicios pueden seguir accediéndose por Tailscale usando IP, MagicDNS o la forma local que definas para cada nodo.
+
+### Acceso público
+
+- Los servicios públicos entran por Cloudflare.
+- Cloudflare Tunnel entrega el tráfico al nodo que aloja el servicio.
+- Ese nodo puede ser el NAS, `v1`, `v2`, `v3` o `v4`.
+
+## Decisiones Operativas Importantes
+
+1. No usar Split DNS para toda la zona `ismola.dev`.
+2. No crear un wildcard local tipo `*.ismola.dev` en Pi-hole si quieres mantener subdominios publicados fuera del NAS.
+3. Mantener el Split DNS limitado a `plex.ismola.dev`, `immich.ismola.dev` y `opencloud.ismola.dev`.
+4. Usar Cloudflare como capa pública común para todos los servicios expuestos a Internet.
+5. Usar Tailscale como red privada común entre NAS y VPS.
+
+## Siguiente Nivel De Documentación
+
+Esta base ya deja claros los diagramas y la topología. A partir de aquí, la siguiente documentación natural sería separar:
+
+1. Inventario de servicios por nodo.
+2. Política de DNS y subdominios.
+3. Flujo de publicación de un servicio nuevo.
+4. Operaciones de NPM, Pi-hole, Tailscale y Cloudflare.
