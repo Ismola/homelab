@@ -4,6 +4,24 @@
       "version": "3.0.0",
       "resolved": "ghcr.io/devcontainers/features/docker-in-docker@sha256:256ffdbc156ffddd4c54b917176b5ddba379335706da7234e338bdd97bb4d771",
       "integrity": "sha256:256ffdbc156ffddd4c54b917176b5ddba379335706da7234e338bdd97bb4d771"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "1.8.0",
+      "resolved": "ghcr.io/devcontainers/features/python@sha256:fbcad6955caeecc5ad3f7886baf652e25cba5225a6c4c2287c536de2e5607511",
+      "integrity": "sha256:fbcad6955caeecc5ad3f7886baf652e25cba5225a6c4c2287c536de2e5607511"
+    },
+    "ghcr.io/hspaans/devcontainer-features/sshpass:1": {
+      "version": "1.0.3",
+      "resolved": "ghcr.io/hspaans/devcontainer-features/sshpass@sha256:92c4cc9dcbd09f45c6764ccaac9b2b1727527d98144c861f8d6f7c4be3c384a1",
+      "integrity": "sha256:92c4cc9dcbd09f45c6764ccaac9b2b1727527d98144c861f8d6f7c4be3c384a1"
+    },
+    "ghcr.io/sliekens/devcontainer-features/ansible:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/sliekens/devcontainer-features/ansible@sha256:81cdfdddcf9238c3c6acd5974db6cb70985e21234823a3914ccea2188eeac0bc",
+      "integrity": "sha256:81cdfdddcf9238c3c6acd5974db6cb70985e21234823a3914ccea2188eeac0bc",
+      "dependsOn": [
+        "ghcr.io/devcontainers/features/python:1"
+      ]
     }
   }
 }
