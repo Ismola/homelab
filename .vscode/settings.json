@@ -1,5 +1,7 @@
 {
     "conventionalCommits.scopes": [
-        "Docker"
+        "Docker",
+        "Ansible",
+        "Readme"
     ]
 }
