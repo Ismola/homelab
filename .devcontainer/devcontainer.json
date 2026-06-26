@@ -16,13 +16,13 @@
 				"ismola.ismola-extension-pack"
 			]
 		}
-	}
+	},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "docker --version",
+	"postCreateCommand": "sudo apt update && sudo apt install iputils-ping -y"
 
 	// Configure tool-specific properties.
 	// "customizations": {},
