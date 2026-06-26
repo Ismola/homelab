@@ -1,0 +1,120 @@
+---
+- name: Registrar nodo K3s en Rancher mediante system-agent
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Connection vars
+    rancher_url: "https://vm5.elver-chicken.ts.net"
+    rancher_token: "pfdsn544zfkfh2k2tsss5499sdd7gj9b5rbnr9z8xt49r5xvbpfkdj"
+    rancher_ca_checksum: "039c95007060a9642e35bf18eff8c6773c6024e047aa40c4b7969eae6b8ecc47"
+    rancher_node_label: "cattle.io/os=linux"
+    # Role vars
+    rancher_role_etcd: false
+    rancher_role_controlplane: false
+    rancher_role_worker: true
+    # Other vars
+    rancher_curl_insecure: true
+    force_register: false
+    rancher_no_log: true
+
+  tasks:
+    - name: Validar variables obligatorias
+      ansible.builtin.assert:
+        that:
+          - rancher_url is defined
+          - rancher_url | length > 0
+          - rancher_token is defined
+          - rancher_token | length > 0
+          - rancher_ca_checksum is defined
+          - rancher_ca_checksum | length > 0
+        fail_msg: "Faltan variables obligatorias: rancher_url, rancher_token o rancher_ca_checksum."
+
+    - name: Instalar dependencias necesarias
+      ansible.builtin.apt:
+        name:
+          - curl
+          - ca-certificates
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Comprobar si rancher-system-agent ya existe
+      ansible.builtin.stat:
+        path: /etc/systemd/system/rancher-system-agent.service
+      register: rancher_agent_service
+
+    - name: Construir argumentos de roles
+      ansible.builtin.set_fact:
+        rancher_role_args: >-
+          {{ '--etcd' if rancher_role_etcd | bool else '' }}
+          {{ '--controlplane' if rancher_role_controlplane | bool else '' }}
+          {{ '--worker' if rancher_role_worker | bool else '' }}
+
+    - name: Registrar nodo en Rancher
+      ansible.builtin.shell: |
+        set -euo pipefail
+
+        CURL_ARGS="-fL"
+        if [ "{{ rancher_curl_insecure | bool }}" = "True" ]; then
+          CURL_ARGS="-kfL"
+        fi
+
+        curl ${CURL_ARGS} "{{ rancher_url }}/system-agent-install.sh" | sh -s - \
+          --server "{{ rancher_url }}" \
+          --label "{{ rancher_node_label }}" \
+          --token "{{ rancher_token }}" \
+          --ca-checksum "{{ rancher_ca_checksum }}" \
+          {{ rancher_role_args }}
+      args:
+        executable: /bin/bash
+      async: 900
+      poll: 0
+      no_log: "{{ rancher_no_log | bool }}"
+      when: force_register | bool or not rancher_agent_service.stat.exists
+      register: rancher_register_job
+
+    - name: Esperar a que termine el instalador de Rancher
+      ansible.builtin.async_status:
+        jid: "{{ rancher_register_job.ansible_job_id }}"
+      register: rancher_register_result
+      until: rancher_register_result.finished
+      retries: 90
+      delay: 10
+      no_log: "{{ rancher_no_log | bool }}"
+      when:
+        - rancher_register_job is defined
+        - rancher_register_job.ansible_job_id is defined
+
+    - name: Recargar systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Comprobar si se creó rancher-system-agent
+      ansible.builtin.stat:
+        path: /etc/systemd/system/rancher-system-agent.service
+      register: rancher_agent_service_after
+
+    - name: Fallar si rancher-system-agent no se creó
+      ansible.builtin.fail:
+        msg: "El instalador terminó, pero no se creó /etc/systemd/system/rancher-system-agent.service. Ejecuta journalctl o repite con -e rancher_no_log=false para ver el error real."
+      when: not rancher_agent_service_after.stat.exists
+
+    - name: Habilitar y arrancar rancher-system-agent
+      ansible.builtin.systemd:
+        name: rancher-system-agent
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Mostrar estado del agente
+      ansible.builtin.command:
+        cmd: systemctl is-active rancher-system-agent
+      register: rancher_agent_status
+      changed_when: false
+      failed_when: rancher_agent_status.stdout != "active"
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: "rancher-system-agent está en estado: {{ rancher_agent_status.stdout }}"
