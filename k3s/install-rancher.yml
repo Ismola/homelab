@@ -1,0 +1,465 @@
+---
+- name: Instalar K3s + Rancher en una VM Ubuntu/Debian con Tailscale
+  hosts: stg_rancher1
+  become: true
+  gather_facts: true
+
+  vars:
+    rancher_hostname: "vm5.elver-chicken.ts.net"
+    k3s_channel: "v1.35"
+    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+    rancher_password_file: "/root/rancher-bootstrap-password.txt"
+
+  handlers:
+    - name: restart k3s
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+        daemon_reload: true
+      when: k3s_service_exists.stat.exists | default(false)
+
+  tasks:
+    - name: Validar que el sistema es Debian/Ubuntu
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == "Debian"
+        fail_msg: "Este playbook está pensado para Ubuntu/Debian. Detectado: {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}"
+
+    - name: Validar arquitectura soportada
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.architecture in ["x86_64", "aarch64", "arm64"]
+        fail_msg: "Arquitectura no soportada: {{ ansible_facts.architecture }}"
+
+    - name: Lanzar sincronización de hora tolerante a cortes SSH
+      ansible.builtin.shell: |
+        set -u
+
+        cat >/tmp/ansible-time-bootstrap.sh <<'EOS'
+        #!/usr/bin/env bash
+        set -u
+
+        rm -f /run/ansible-time-bootstrap.done
+
+        sync_time_from_http_date() {
+          for host in google.com cloudflare.com deb.debian.org; do
+            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/${host}/80" 2>/dev/null; then
+              exec 3<>"/dev/tcp/${host}/80" || continue
+              printf 'HEAD / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n' "$host" >&3
+
+              while IFS=$'\r' read -r line <&3; do
+                line="${line%$'\r'}"
+                case "${line,,}" in
+                  date:*)
+                    http_date="${line#Date: }"
+                    http_date="${http_date#date: }"
+                    date -u -s "$http_date" >/dev/null 2>&1 && {
+                      exec 3>&- 3<&- || true
+                      return 0
+                    }
+                  ;;
+                esac
+              done
+
+              exec 3>&- 3<&- || true
+            fi
+          done
+
+          return 1
+        }
+
+        timedatectl set-ntp true >/dev/null 2>&1 || true
+        systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+        systemctl restart systemd-timesyncd >/dev/null 2>&1 || true
+
+        for i in $(seq 1 30); do
+          if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo no)" = "yes" ]; then
+            break
+          fi
+          sleep 2
+        done
+
+        year="$(date -u +%Y 2>/dev/null || echo 1970)"
+
+        if [ "$year" -lt 2025 ] || [ "$year" -gt 2035 ]; then
+          sync_time_from_http_date || true
+        fi
+
+        touch /run/ansible-time-bootstrap.done
+        EOS
+
+        chmod +x /tmp/ansible-time-bootstrap.sh
+        nohup /tmp/ansible-time-bootstrap.sh >/tmp/ansible-time-bootstrap.log 2>&1 &
+        echo "time bootstrap started"
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+
+    - name: Limpiar estado unreachable si la hora cortó SSH
+      ansible.builtin.meta: clear_host_errors
+
+    - name: Esperar reconexión SSH tras tocar hora
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+        connect_timeout: 10
+        sleep: 5
+
+    - name: Resetear conexión SSH de Ansible
+      ansible.builtin.meta: reset_connection
+
+    - name: Esperar final de sincronización de hora
+      ansible.builtin.command: test -f /run/ansible-time-bootstrap.done
+      register: time_bootstrap_done
+      changed_when: false
+      retries: 60
+      delay: 2
+      until: time_bootstrap_done.rc == 0
+
+    - name: Verificar que la hora ya es razonable
+      ansible.builtin.command: date -u +%Y
+      register: fixed_year
+      changed_when: false
+      failed_when: fixed_year.stdout | int < 2025 or fixed_year.stdout | int > 2035
+
+    - name: Esperar locks de apt/dpkg
+      ansible.builtin.shell: |
+        while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+          echo "Esperando a apt/dpkg..."
+          sleep 5
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Reparar dpkg si quedó a medias
+      ansible.builtin.command: dpkg --configure -a
+      changed_when: false
+      failed_when: false
+
+    - name: Instalar paquetes base
+      ansible.builtin.apt:
+        name:
+          - curl
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - tar
+          - gzip
+          - openssl
+          - iptables
+          - iproute2
+          - procps
+        state: present
+        update_cache: true
+        lock_timeout: 300
+      retries: 5
+      delay: 10
+
+    - name: Cargar módulos de kernel necesarios
+      ansible.builtin.command: "modprobe {{ item }}"
+      loop:
+        - overlay
+        - br_netfilter
+      changed_when: false
+      failed_when: false
+
+    - name: Persistir módulos de Kubernetes
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        mode: "0644"
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Configurar sysctl para Kubernetes
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-kubernetes.conf
+        mode: "0644"
+        content: |
+          net.bridge.bridge-nf-call-iptables=1
+          net.bridge.bridge-nf-call-ip6tables=1
+          net.ipv4.ip_forward=1
+
+    - name: Aplicar sysctl
+      ansible.builtin.command: sysctl --system
+      changed_when: false
+      failed_when: false
+
+    - name: Comprobar swap activo
+      ansible.builtin.command: swapon --show --noheadings
+      register: swap_status
+      changed_when: false
+      failed_when: false
+
+    - name: Desactivar swap
+      ansible.builtin.command: swapoff -a
+      when: swap_status.stdout | trim != ""
+      changed_when: true
+
+    - name: Deshabilitar swap en fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s.*)$'
+        replace: '# disabled-for-kubernetes \1'
+        backup: true
+
+    - name: Comprobar si firewalld está activo
+      ansible.builtin.command: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: Desactivar firewalld si está activo
+      ansible.builtin.systemd:
+        name: firewalld
+        enabled: false
+        state: stopped
+      when: firewalld_status.stdout | trim == "active"
+
+    - name: Comprobar si UFW está activo
+      ansible.builtin.shell: |
+        if command -v ufw >/dev/null 2>&1; then
+          ufw status | grep -q "Status: active"
+        else
+          exit 1
+        fi
+      register: ufw_active
+      changed_when: false
+      failed_when: false
+
+    - name: Abrir puertos en UFW por tailscale0
+      ansible.builtin.command: "ufw allow in on tailscale0 to any port {{ item }} proto tcp"
+      loop:
+        - "80"
+        - "443"
+        - "6443"
+      when: ufw_active.rc == 0
+      changed_when: true
+      failed_when: false
+
+    - name: Recargar UFW
+      ansible.builtin.command: ufw reload
+      when: ufw_active.rc == 0
+      changed_when: true
+      failed_when: false
+
+    - name: Comprobar Tailscale
+      ansible.builtin.command: tailscale ip -4
+      register: tailscale_ip_cmd
+      changed_when: false
+      failed_when: tailscale_ip_cmd.stdout | trim == ""
+
+    - name: Guardar IP de Tailscale
+      ansible.builtin.set_fact:
+        tailscale_ip: "{{ tailscale_ip_cmd.stdout_lines[0] }}"
+
+    - name: Resetear conexión antes de instalar K3s
+      ansible.builtin.meta: reset_connection
+
+    - name: Crear directorio de configuración de K3s
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: "0755"
+
+    - name: Comprobar si existe servicio K3s
+      ansible.builtin.stat:
+        path: /etc/systemd/system/k3s.service
+      register: k3s_service_exists
+
+    - name: Configurar K3s
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0644"
+        content: |
+          write-kubeconfig-mode: "0644"
+          tls-san:
+            - "{{ rancher_hostname }}"
+            - "{{ tailscale_ip }}"
+          node-external-ip: "{{ tailscale_ip }}"
+      notify: restart k3s
+
+    - name: Instalar K3s
+      ansible.builtin.shell: |
+        set -e
+        curl -sfL https://get.k3s.io | \
+          INSTALL_K3S_CHANNEL="{{ k3s_channel }}" \
+          INSTALL_K3S_EXEC="server" \
+          sh -
+      args:
+        executable: /bin/bash
+        creates: /usr/local/bin/k3s
+
+    - name: Activar y arrancar K3s
+      ansible.builtin.systemd:
+        name: k3s
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Aplicar restart de K3s si cambió config
+      ansible.builtin.meta: flush_handlers
+
+    - name: Resetear conexión tras arrancar K3s
+      ansible.builtin.meta: reset_connection
+
+    - name: Esperar API Kubernetes
+      ansible.builtin.command: k3s kubectl get nodes
+      register: k8s_api
+      changed_when: false
+      retries: 90
+      delay: 5
+      until: k8s_api.rc == 0
+
+    - name: Esperar nodo Ready
+      ansible.builtin.command: k3s kubectl wait --for=condition=Ready node --all --timeout=10m
+      changed_when: false
+
+    - name: Comprobar si Helm está instalado
+      ansible.builtin.command: helm version --short
+      register: helm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Descargar instalador oficial de Helm
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get_helm.sh
+        mode: "0700"
+      when: helm_check.rc != 0
+
+    - name: Instalar Helm
+      ansible.builtin.command: /tmp/get_helm.sh
+      environment:
+        VERIFY_CHECKSUM: "true"
+      when: helm_check.rc != 0
+
+    - name: Comprobar fichero de password Rancher
+      ansible.builtin.stat:
+        path: "{{ rancher_password_file }}"
+      register: rancher_password_stat
+
+    - name: Leer password Rancher existente
+      ansible.builtin.slurp:
+        src: "{{ rancher_password_file }}"
+      register: rancher_password_slurp
+      when: rancher_password_stat.stat.exists
+      no_log: true
+
+    - name: Reutilizar password Rancher existente
+      ansible.builtin.set_fact:
+        rancher_bootstrap_password: "{{ rancher_password_slurp.content | b64decode | trim }}"
+      when: rancher_password_stat.stat.exists
+      no_log: true
+
+    - name: Generar password Rancher si no existe
+      ansible.builtin.command: openssl rand -hex 18
+      register: rancher_password_generated
+      when: not rancher_password_stat.stat.exists
+      changed_when: true
+      no_log: true
+
+    - name: Guardar nuevo password Rancher
+      ansible.builtin.set_fact:
+        rancher_bootstrap_password: "{{ rancher_password_generated.stdout | trim }}"
+      when: not rancher_password_stat.stat.exists
+      no_log: true
+
+    - name: Escribir password Rancher en disco
+      ansible.builtin.copy:
+        dest: "{{ rancher_password_file }}"
+        mode: "0600"
+        content: "{{ rancher_bootstrap_password }}\n"
+      no_log: true
+
+    - name: Añadir repo Helm jetstack
+      ansible.builtin.command: helm repo add jetstack https://charts.jetstack.io --force-update
+      changed_when: false
+
+    - name: Añadir repo Helm rancher-stable
+      ansible.builtin.command: helm repo add rancher-stable https://releases.rancher.com/server-charts/stable --force-update
+      changed_when: false
+
+    - name: Actualizar repos Helm
+      ansible.builtin.command: helm repo update
+      changed_when: false
+
+    - name: Instalar cert-manager
+      ansible.builtin.command: >
+        helm upgrade --install cert-manager jetstack/cert-manager
+        --namespace cert-manager
+        --create-namespace
+        --set crds.enabled=true
+        --wait
+        --timeout 10m
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: cert_manager_install
+      changed_when: >
+        'has been installed' in cert_manager_install.stdout or
+        'has been upgraded' in cert_manager_install.stdout
+
+    - name: Esperar cert-manager
+      ansible.builtin.command: "k3s kubectl -n cert-manager wait --for=condition=Available deploy/{{ item }} --timeout=5m"
+      loop:
+        - cert-manager
+        - cert-manager-cainjector
+        - cert-manager-webhook
+      changed_when: false
+
+    - name: Crear namespace cattle-system
+      ansible.builtin.shell: |
+        k3s kubectl create namespace cattle-system --dry-run=client -o yaml | k3s kubectl apply -f -
+      args:
+        executable: /bin/bash
+      register: cattle_namespace
+      changed_when: "'created' in cattle_namespace.stdout or 'configured' in cattle_namespace.stdout"
+
+    - name: Instalar Rancher
+      ansible.builtin.command: >
+        helm upgrade --install rancher rancher-stable/rancher
+        --namespace cattle-system
+        --set-string hostname={{ rancher_hostname }}
+        --set-string bootstrapPassword={{ rancher_bootstrap_password }}
+        --set-string ingress.tls.source=rancher
+        --set replicas=1
+        --wait
+        --timeout 20m
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      register: rancher_install
+      changed_when: >
+        'has been installed' in rancher_install.stdout or
+        'has been upgraded' in rancher_install.stdout
+      no_log: true
+
+    - name: Esperar rollout de Rancher
+      ansible.builtin.command: k3s kubectl -n cattle-system rollout status deploy/rancher --timeout=20m
+      changed_when: false
+
+    - name: Comprobar endpoint Rancher
+      ansible.builtin.shell: |
+        curl -kfsS \
+          --connect-timeout 5 \
+          --resolve "{{ rancher_hostname }}:443:{{ tailscale_ip }}" \
+          "https://{{ rancher_hostname }}/ping" | grep -qi pong
+      args:
+        executable: /bin/bash
+      register: rancher_ping
+      changed_when: false
+      retries: 60
+      delay: 10
+      until: rancher_ping.rc == 0
+
+    - name: Resultado final
+      ansible.builtin.debug:
+        msg:
+          - "Rancher instalado correctamente."
+          - "URL: https://{{ rancher_hostname }}"
+          - "Usuario: admin"
+          - "Password: {{ rancher_bootstrap_password }}"
+          - "Password guardado en: {{ rancher_password_file }}"
+          - "Kubeconfig: {{ kubeconfig_path }}"
+          - "IP Tailscale: {{ tailscale_ip }}"
