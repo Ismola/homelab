@@ -1,0 +1,24 @@
+---
+- name: Apagar hosts Linux
+  hosts: all
+  become: true
+  gather_facts: false
+  serial: "{{ serial_batch | default(1) }}"
+
+  vars:
+    confirm_poweroff: false
+
+  pre_tasks:
+    - name: Confirmar apagado explícitamente
+      ansible.builtin.assert:
+        that:
+          - confirm_poweroff | bool
+        fail_msg: >
+          Por seguridad, debes ejecutar este playbook con:
+          -e confirm_poweroff=true
+
+  tasks:
+    - name: Apagar host
+      community.general.shutdown:
+        delay: 0
+        msg: "Apagado iniciado por Ansible"
