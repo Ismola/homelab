@@ -1,0 +1,16 @@
+---
+- name: Reiniciar hosts Linux
+  hosts: all
+  become: true
+  gather_facts: false
+  serial: "{{ serial_batch | default(1) }}"
+
+  tasks:
+    - name: Reiniciar host y esperar a que vuelva
+      ansible.builtin.reboot:
+        msg: "Reinicio iniciado por Ansible"
+        reboot_timeout: 900
+        connect_timeout: 30
+        pre_reboot_delay: 0
+        post_reboot_delay: 20
+        test_command: whoami
