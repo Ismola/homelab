@@ -5,10 +5,11 @@
   gather_facts: true
 
   vars:
-    rancher_hostname: "vm5.elver-chicken.ts.net"
-    k3s_channel: "v1.35"
-    kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
-    rancher_password_file: "/root/rancher-bootstrap-password.txt"
+    rancher_hostname: "{{ lookup('ansible.builtin.env', 'RANCHER_HOSTNAME') | default('vm5.elver-chicken.ts.net', true) }}"
+    rancher_agent_tls_mode: "{{ lookup('ansible.builtin.env', 'RANCHER_AGENT_TLS_MODE') | default('system-store', true) }}"
+    k3s_channel: "{{ lookup('ansible.builtin.env', 'K3S_CHANNEL') | default('v1.35', true) }}"
+    kubeconfig_path: "{{ lookup('ansible.builtin.env', 'KUBECONFIG_PATH') | default('/etc/rancher/k3s/k3s.yaml', true) }}"
+    rancher_password_file: "{{ lookup('ansible.builtin.env', 'RANCHER_PASSWORD_FILE') | default('/root/rancher-bootstrap-password.txt', true) }}"
 
   handlers:
     - name: restart k3s
