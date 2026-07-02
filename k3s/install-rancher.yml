@@ -1,11 +1,11 @@
 ---
 - name: Instalar K3s + Rancher en una VM Ubuntu/Debian con Tailscale
-  hosts: stg_rancher1
+  hosts: rancher_node
   become: true
   gather_facts: true
 
   vars:
-    rancher_hostname: "{{ lookup('ansible.builtin.env', 'RANCHER_HOSTNAME') | default('vm5.elver-chicken.ts.net', true) }}"
+    rancher_hostname: "{{ lookup('ansible.builtin.env', 'RANCHER_HOSTNAME') | default('rancher.elver-chicken.ts.net', true) }}"
     rancher_agent_tls_mode: "{{ lookup('ansible.builtin.env', 'RANCHER_AGENT_TLS_MODE') | default('system-store', true) }}"
     k3s_channel: "{{ lookup('ansible.builtin.env', 'K3S_CHANNEL') | default('v1.35', true) }}"
     kubeconfig_path: "{{ lookup('ansible.builtin.env', 'KUBECONFIG_PATH') | default('/etc/rancher/k3s/k3s.yaml', true) }}"
