@@ -12,6 +12,7 @@
   hosts: all
   become: true
   gather_facts: true
+  serial: 1
 
   vars:
     rancher_url: "{{ lookup('ansible.builtin.env', 'RANCHER_URL') | default('https://vm5.elver-chicken.ts.net', true) }}"
