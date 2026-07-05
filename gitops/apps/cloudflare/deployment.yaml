@@ -9,7 +9,7 @@ metadata:
   name: cloudflared
   namespace: cloudflare
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: cloudflared
