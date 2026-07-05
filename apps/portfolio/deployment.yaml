@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: portfolio
-          image: ghcr.io/ismola/personal-portfolio:main
+          image: ghcr.io/ismola/personal-portfolio:master
           imagePullPolicy: Always
           ports:
             - containerPort: 4321
