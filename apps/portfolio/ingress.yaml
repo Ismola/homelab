@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: portfolio.ismola.dev
+    - host: ismola.dev
       http:
         paths:
           - path: /
