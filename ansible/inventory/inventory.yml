@@ -1,0 +1,115 @@
+---
+k3s_cluster:
+  children:
+    server:
+      hosts:
+        v3:
+          ansible_host: v3.elver-chicken.ts.net
+          ts_ip: "100.105.109.20"
+          provider: oracle
+          ram_gb: 24
+          cpu: 4
+          arch: arm64
+          distro: ubuntu
+
+        v7:
+          ansible_host: v7.elver-chicken.ts.net
+          ts_ip: "100.117.67.57"
+          provider: oracle
+          ram_gb: 12
+          cpu: 2
+          arch: amd64
+          distro: ubuntu
+
+        rpi:
+          ansible_host: rpi.elver-chicken.ts.net
+          ts_ip: "100.80.157.10"
+          provider: homelab
+          ram_gb: 2
+          cpu: 4
+          arch: arm64
+          distro: debian
+
+    agent:
+      hosts:
+        v1:
+          ansible_host: v1.elver-chicken.ts.net
+          ts_ip: "100.98.234.107"
+          provider: oracle
+          ram_gb: 1
+          cpu: 1
+          arch: amd64
+          distro: ubuntu
+
+        v2:
+          ansible_host: v2.elver-chicken.ts.net
+          ts_ip: "100.115.97.88"
+          provider: oracle
+          ram_gb: 1
+          cpu: 1
+          arch: amd64
+          distro: ubuntu
+
+        v4:
+          ansible_host: v4.elver-chicken.ts.net
+          ts_ip: "100.91.216.33"
+          provider: google
+          ram_gb: 1
+          cpu: 1
+          arch: amd64
+          distro: debian
+
+        v5:
+          ansible_host: v5.elver-chicken.ts.net
+          ts_ip: "100.111.119.77"
+          provider: oracle
+          ram_gb: 1
+          cpu: 1
+          arch: amd64
+          distro: ubuntu
+
+        v6:
+          ansible_host: v6.elver-chicken.ts.net
+          ts_ip: "100.90.63.53"
+          provider: oracle
+          ram_gb: 1
+          cpu: 1
+          arch: amd64
+          distro: ubuntu
+
+  vars:
+    ansible_port: 22
+    ansible_user: root
+
+    k3s_version: v1.31.12+k3s1
+    token: "CAMBIA_ESTO_POR_UN_TOKEN_LARGO"
+
+    # Para empezar, usa v3 como endpoint de bootstrap.
+    # Lo ideal a futuro sería un endpoint estable/LB por Tailscale.
+    api_endpoint: v3.elver-chicken.ts.net
+    api_port: 6443
+
+    # Importante en multicloud/Tailscale:
+    # fuerza a K3s/flannel a usar tailscale0.
+    extra_server_args: >-
+      --prefer-bundled-bin
+      --flannel-iface=tailscale0
+      --node-ip={{ ts_ip }}
+      --advertise-address={{ ts_ip }}
+      --tls-san={{ api_endpoint }}
+      --tls-san=v3.elver-chicken.ts.net
+      --tls-san=v7.elver-chicken.ts.net
+      --tls-san=rpi.elver-chicken.ts.net
+      --node-label=isma.dev/provider={{ provider }}
+      --node-label=isma.dev/ram-gb={{ ram_gb }}
+      --node-label=isma.dev/cpu={{ cpu }}
+
+    extra_agent_args: >-
+      --prefer-bundled-bin
+      --flannel-iface=tailscale0
+      --node-ip={{ ts_ip }}
+      --node-label=isma.dev/provider={{ provider }}
+      --node-label=isma.dev/ram-gb={{ ram_gb }}
+      --node-label=isma.dev/cpu={{ cpu }}
+
+    user_kubectl: true

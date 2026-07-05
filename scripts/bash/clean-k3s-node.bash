@@ -64,4 +64,5 @@ systemctl daemon-reload
 systemctl reset-failed
 
 echo "==> Limpieza terminada. Recomendado reiniciar ahora."
+reboot
 '
