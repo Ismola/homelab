@@ -16,7 +16,7 @@ spec:
         repoURL: https://github.com/Ismola/homelab.git
         revision: main
         directories:
-          - path: apps/*
+          - path: gitops/apps/*
 
   template:
     metadata:
