@@ -21,3 +21,25 @@
 #           imagePullPolicy: Always
 #           ports:
 #             - containerPort: 4321
+          # env:
+          #   - name: HOST
+          #     value: "0.0.0.0"
+          #   - name: PORT
+          #     value: "80"
+          #   - name: MONGO_DB_NAME
+          #     value: "sj_wedding"
+          #   - name: MONGO_URI
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: sj-wedding-secrets
+          #         key: MONGO_URI
+    # resources:
+    #         requests:
+    #           cpu: "50m"
+    #           memory: "64Mi"
+    #         limits:
+    #           cpu: "500m"
+    #           memory: "256Mi"
+
+
+
