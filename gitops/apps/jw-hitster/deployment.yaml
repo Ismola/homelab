@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jw-hitster
+  namespace: jw-hitster
+  labels:
+    app: jw-hitster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jw-hitster
+  template:
+    metadata:
+      labels:
+        app: jw-hitster
+    spec:
+      containers:
+        - name: jw-hitster
+          image: ghcr.io/ismola/jw-hitster:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000

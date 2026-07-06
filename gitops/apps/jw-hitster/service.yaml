@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jw-hitster
+  namespace: jw-hitster
+spec:
+  type: ClusterIP
+  selector:
+    app: jw-hitster
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
