@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: apple-concept
+  namespace: apple-concept
+spec:
+  type: ClusterIP
+  selector:
+    app: apple-concept
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

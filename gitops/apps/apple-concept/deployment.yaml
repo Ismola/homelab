@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apple-concept
+  namespace: apple-concept
+  labels:
+    app: apple-concept
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apple-concept
+  template:
+    metadata:
+      labels:
+        app: apple-concept
+    spec:
+      containers:
+        - name: apple-concept
+          image: ghcr.io/ismola/apple-concept:master
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
