@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trivial-php
+  namespace: trivial-php
+  labels:
+    app: trivial-php
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trivial-php
+  template:
+    metadata:
+      labels:
+        app: trivial-php
+    spec:
+      containers:
+        - name: trivial-php
+          image: ghcr.io/ismola/trivial-php:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
