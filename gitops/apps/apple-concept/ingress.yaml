@@ -13,6 +13,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: portfolio
+                name: apple-concept
                 port:
                   number: 80
