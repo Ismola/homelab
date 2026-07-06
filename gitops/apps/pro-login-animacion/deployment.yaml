@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pro-login-animacion
+  namespace: pro-login-animacion
+  labels:
+    app: pro-login-animacion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pro-login-animacion
+  template:
+    metadata:
+      labels:
+        app: pro-login-animacion
+    spec:
+      containers:
+        - name: pro-login-animacion
+          image: ghcr.io/ismola/pro-login-animacion:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80

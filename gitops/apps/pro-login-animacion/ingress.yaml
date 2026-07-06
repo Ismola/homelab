@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pro-login-animacion
+  namespace: pro-login-animacion
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: pro-login-animacion.ismola.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pro-login-animacion
+                port:
+                  number: 80
