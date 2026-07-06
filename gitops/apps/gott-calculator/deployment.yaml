@@ -20,4 +20,4 @@ spec:
           image: ghcr.io/ismola/gott-calculator:main
           imagePullPolicy: Always
           ports:
-            - containerPort: 4321
+            - containerPort: 80
