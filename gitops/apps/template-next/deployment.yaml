@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: template-next
+  namespace: template-next
+  labels:
+    app: template-next
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: template-next
+  template:
+    metadata:
+      labels:
+        app: template-next
+    spec:
+      containers:
+        - name: template-next
+          image: ghcr.io/ismola/template-next:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
