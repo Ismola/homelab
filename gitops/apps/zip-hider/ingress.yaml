@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zip-hider
+  namespace: zip-hider
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: zip-hider.ismola.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: zip-hider
+                port:
+                  number: 80

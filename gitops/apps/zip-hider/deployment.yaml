@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zip-hider
+  namespace: zip-hider
+  labels:
+    app: zip-hider
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zip-hider
+  template:
+    metadata:
+      labels:
+        app: zip-hider
+    spec:
+      containers:
+        - name: zip-hider
+          image: ghcr.io/ismola/zip-hider:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
