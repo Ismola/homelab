@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: african-art-exhibition-concept
+  namespace: african-art-exhibition-concept
+  labels:
+    app: african-art-exhibition-concept
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: african-art-exhibition-concept
+  template:
+    metadata:
+      labels:
+        app: african-art-exhibition-concept
+    spec:
+      containers:
+        - name: african-art-exhibition-concept
+          image: ghcr.io/ismola/african-art-exhibition-concept:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80

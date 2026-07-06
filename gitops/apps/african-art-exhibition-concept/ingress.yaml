@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: african-art-exhibition-concept
+  namespace: african-art-exhibition-concept
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: african-art-exhibition-concept.ismola.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: african-art-exhibition-concept
+                port:
+                  number: 80
