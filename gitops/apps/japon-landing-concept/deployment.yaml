@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: japon-landing-concept
+  namespace: japon-landing-concept
+  labels:
+    app: japon-landing-concept
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: japon-landing-concept
+  template:
+    metadata:
+      labels:
+        app: japon-landing-concept
+    spec:
+      containers:
+        - name: japon-landing-concept
+          image: ghcr.io/ismola/japon-landing-concept:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
