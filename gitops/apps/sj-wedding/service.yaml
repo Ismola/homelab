@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sj-wedding
+  namespace: sj-wedding
+spec:
+  type: ClusterIP
+  selector:
+    app: sj-wedding
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

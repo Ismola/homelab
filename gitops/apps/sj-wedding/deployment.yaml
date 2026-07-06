@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sj-wedding
+  namespace: sj-wedding
+  labels:
+    app: sj-wedding
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sj-wedding
+  template:
+    metadata:
+      labels:
+        app: sj-wedding
+    spec:
+      containers:
+        - name: sj-wedding
+          image: ghcr.io/ismola/s-j-wedding:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "80"
+            - name: MONGO_URI
+              value: "mongodb://h0:27017"
+            - name: MONGO_DB_NAME
+              value: "sj_wedding"
