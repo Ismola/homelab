@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: ismola.dev
+    - host: trivial-php.ismola.dev
       http:
         paths:
           - path: /
