@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cakeshop-concept
+  namespace: cakeshop-concept
+  labels:
+    app: cakeshop-concept
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cakeshop-concept
+  template:
+    metadata:
+      labels:
+        app: cakeshop-concept
+    spec:
+      containers:
+        - name: cakeshop-concept
+          image: ghcr.io/ismola/cakeshop-concept:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4321

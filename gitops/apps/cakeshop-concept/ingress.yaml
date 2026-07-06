@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cakeshop-concept
+  namespace: cakeshop-concept
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: cakeshop-concept.ismola.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cakeshop-concept
+                port:
+                  number: 80
