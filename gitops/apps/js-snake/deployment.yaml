@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: js-snake
+  namespace: js-snake
+  labels:
+    app: js-snake
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: js-snake
+  template:
+    metadata:
+      labels:
+        app: js-snake
+    spec:
+      containers:
+        - name: js-snake
+          image: ghcr.io/ismola/js-snake:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80

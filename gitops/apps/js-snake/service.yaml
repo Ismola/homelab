@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: js-snake
+  namespace: js-snake
+spec:
+  type: ClusterIP
+  selector:
+    app: js-snake
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
