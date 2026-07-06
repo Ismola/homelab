@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gott-calculator
+  namespace: gott-calculator
+spec:
+  type: ClusterIP
+  selector:
+    app: gott-calculator
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4321

@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gott-calculator
+  namespace: gott-calculator
+  labels:
+    app: gott-calculator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gott-calculator
+  template:
+    metadata:
+      labels:
+        app: gott-calculator
+    spec:
+      containers:
+        - name: gott-calculator
+          image: ghcr.io/ismola/gott-calculator:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4321
