@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: apple-concept
-          image: ghcr.io/ismola/apple-concept:master
+          image: ghcr.io/ismola/apple-concept:main
           imagePullPolicy: Always
           ports:
             - containerPort: 80
