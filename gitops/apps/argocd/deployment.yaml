@@ -1,34 +1,34 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: argocd-cmd-params-cm
-  namespace: argocd
-  labels:
-    app.kubernetes.io/name: argocd-cmd-params-cm
-    app.kubernetes.io/part-of: argocd
-data:
-  server.insecure: "true"
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: argocd-cmd-params-cm
+#   namespace: argocd
+#   labels:
+#     app.kubernetes.io/name: argocd-cmd-params-cm
+#     app.kubernetes.io/part-of: argocd
+# data:
+#   server.insecure: "true"
 
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: argocd-tailscale
-  namespace: argocd
-  annotations:
-    tailscale.com/proxy-group: ingress-proxies
-spec:
-  ingressClassName: tailscale
-  tls:
-    - hosts:
-        - argocd
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: argocd-server
-                port:
-                  number: 80
+# ---
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: argocd-tailscale
+#   namespace: argocd
+#   annotations:
+#     tailscale.com/proxy-group: ingress-proxies
+# spec:
+#   ingressClassName: tailscale
+#   tls:
+#     - hosts:
+#         - argocd
+#   rules:
+#     - http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: argocd-server
+#                 port:
+#                   number: 80
