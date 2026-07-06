@@ -26,7 +26,14 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: "80"
-            - name: MONGO_URI
-              value: "mongodb://h0:27017"
             - name: MONGO_DB_NAME
               value: "sj_wedding"
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: sj-wedding-secrets
+                  key: MONGO_URI
+
+
+
+
