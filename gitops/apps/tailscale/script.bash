@@ -1,5 +1,12 @@
-kubectl create namespace tailscale --dry-run=client -o yaml | kubectl apply -f -
+helm repo add tailscale https://pkgs.tailscale.com/helmcharts
+helm repo update
 
-kubectl -n tailscale create secret generic operator-oauth \
-  --from-literal=client_id='xxxx' \
-  --from-literal=client_secret='tskey-client-xxx'
+helm upgrade \
+  --install \
+  tailscale-operator \
+  tailscale/tailscale-operator \
+  --namespace=tailscale \
+  --create-namespace \
+  --set-string oauth.clientId="xxx" \
+  --set-string oauth.clientSecret="tskey-client-xxx" \
+  --wait
