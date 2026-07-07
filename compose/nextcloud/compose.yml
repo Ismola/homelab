@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  db:
+    image: mariadb:latest
+    container_name: next-mariadb
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - /volume1/docker/nextcloud/db:/var/lib/mysql
+    networks:
+      - backend
+
+  redis:
+    image: redis:alpine
+    container_name: next-redis
+    restart: unless-stopped
+    networks:
+      - backend
+
+  app:
+    image: lscr.io/linuxserver/nextcloud:latest
+    container_name: nextcloud-app
+    restart: unless-stopped
+    depends_on:
+      - db
+      - redis
+    environment:
+      PUID: 1000
+      PGID: 10
+      TZ: Europe/Madrid
+    volumes:
+      - /volume1/docker/nextcloud/config:/config
+      - /volume1/Archivos/nextcloud:/data
+    ports:
+      - "8080:443"
+    networks:
+      - backend
+      - cloudflared_default
+
+
+networks:
+  backend:
+  cloudflared_default:
+    external: true

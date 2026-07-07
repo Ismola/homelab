@@ -1,0 +1,2 @@
+Antes hay que hacer esto para poder usar un path especifico como volumen y no tenga problema con permisos:
+[https://community.n8n.io/t/use-local-directory-instead-of-docker-volume-for-n8n-data/151593/2](https://community.n8n.io/t/use-local-directory-instead-of-docker-volume-for-n8n-data/151593/2)

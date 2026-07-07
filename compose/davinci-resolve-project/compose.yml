@@ -1,0 +1,81 @@
+version: "3.8"
+
+x-common:
+  database: &db-environment
+    POSTGRES_DB: h0
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: DaVinci
+    TZ: Europe/Madrid
+
+  backup: &backup-environment
+    SCHEDULE: "@daily"
+    BACKUP_KEEP_DAYS: 7
+    BACKUP_KEEP_WEEKS: 4
+    BACKUP_KEEP_MONTHS: 6
+    BACKUP_LOCATION: /backups
+
+  admin: &admin-environment
+    PGADMIN_DEFAULT_EMAIL: admin@admin.com
+    PGADMIN_DEFAULT_PASSWORD: root
+
+services:
+  # 1. El "Sidecar" de Tailscale: Actúa como la tarjeta de red para Postgres
+  ts-postgres:
+    image: tailscale/tailscale:latest
+    container_name: ts_resolve_db
+    hostname: resolve-db  # <--- Este será el nombre que pongas en DaVinci Resolve
+    environment:
+      - TS_AUTHKEY=tskey-auth-kS84nc9eiK11CNTRL-YnU4qdReCg16KEQ1wYUwf1FP46e3Thxqi
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+    volumes:      
+      - ${DOCKER_PATH}/davinci/tailscale/state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+    restart: unless-stopped
+
+  # 2. El servidor PostgreSQL
+  postgres:
+    user: "0:0"
+    container_name: resolve_pgsql
+    image: postgres:13
+    restart: always
+    network_mode: "service:ts-postgres" # <--- Usa la red de Tailscale
+    environment:
+      <<: [*db-environment]
+    volumes:
+      - ${DOCKER_PATH}/davinci/db:/var/lib/postgresql/data
+    depends_on:
+      - ts-postgres
+
+  # 3. El servicio de Backups
+  pgbackups:
+    user: "0:0"
+    container_name: resolve_pgbackup
+    image: prodrigestivill/postgres-backup-local:13
+    restart: always
+    network_mode: "service:ts-postgres" # <--- También en la misma red
+    volumes:
+      - ${DOCKER_PATH}/davinci/backups:/backups
+    depends_on:
+      - postgres
+    environment:
+      <<: [*db-environment, *backup-environment]
+      POSTGRES_HOST: localhost # Al estar en la misma red, es localhost
+      POSTGRES_EXTRA_OPTS: --blobs --format=custom --quote-all-identifiers
+      BACKUP_SUFFIX: .backup
+
+  # 4. pgAdmin para gestión (Este sí lo mapeamos al puerto 3001 del host)
+  pgadmin:
+    user: "0:0"
+    container_name: resolve_pgadmin
+    image: dpage/pgadmin4
+    restart: always
+    ports:
+      - "3001:80"
+    environment:
+      <<: [*admin-environment]
+    depends_on:
+      - postgres
+    # Nota: pgAdmin puede estar en red bridge normal para acceder por IP:3001

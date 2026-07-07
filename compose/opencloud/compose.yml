@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  opencloud:
+    image: opencloudeu/opencloud-rolling
+    container_name: opencloud
+    user: "0:0"
+
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "opencloud init || true; opencloud server"]
+
+    environment:
+      OC_URL: https://opencloud.ismola.dev
+      OC_LOG_LEVEL: info
+      OC_LOG_COLOR: "false"
+      OC_LOG_PRETTY: "false"
+
+      PROXY_TLS: "false"
+      OC_INSECURE: "true"
+
+      PROXY_ENABLE_BASIC_AUTH: "false"
+      IDM_CREATE_DEMO_USERS: "false"
+      IDM_ADMIN_PASSWORD: "admin"
+
+      FRONTEND_ARCHIVER_MAX_SIZE: "10000000000000"
+      FRONTEND_CHECK_FOR_UPDATES: "true"
+
+      OC_SHARING_PUBLIC_SHARE_MUST_HAVE_PASSWORD: "false"
+      OC_SHARING_PUBLIC_WRITEABLE_SHARE_MUST_HAVE_PASSWORD: "false"
+
+      OC_PASSWORD_POLICY_DISABLED: "false"
+      OC_PASSWORD_POLICY_MIN_CHARACTERS: "8"
+      OC_PASSWORD_POLICY_MIN_LOWERCASE_CHARACTERS: "1"
+      OC_PASSWORD_POLICY_MIN_UPPERCASE_CHARACTERS: "1"
+      OC_PASSWORD_POLICY_MIN_DIGITS: "1"
+      OC_PASSWORD_POLICY_MIN_SPECIAL_CHARACTERS: "1"
+
+      OC_DEFAULT_LANGUAGE: en
+
+    volumes:
+      - /volume1/docker/opencloud/config:/etc/opencloud
+      - /volume1/Archivos/opencloud:/var/lib/opencloud
+
+    restart: always
+    expose:
+      - "9200"
+    ports:
+      - '9200:9200'
+    networks:
+      - cloudflared_default
+
+networks:
+  cloudflared_default:
+    external: true

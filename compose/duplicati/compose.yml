@@ -1,0 +1,19 @@
+---
+services:
+  duplicati:
+    image: lscr.io/linuxserver/duplicati:latest
+    container_name: duplicati
+    environment:
+      - PUID=1000
+      - PGID=10
+      - TZ=Europe/Madrid
+      - SETTINGS_ENCRYPTION_KEY=Ismola2002!!
+      - CLI_ARGS= #optional
+      - DUPLICATI__WEBSERVICE_PASSWORD=Ismola2002!!
+    volumes:
+      - /volume1/docker/duplicati/config:/config     
+      - /mnt/@usb/sda1/Volumen1/backups:/backups
+      - /volume1:/source
+    ports:
+      - 8200:8200
+    restart: unless-stopped
