@@ -7,9 +7,9 @@ services:
       - PUID=1000
       - PGID=10
       - TZ=Europe/Madrid
-      - SETTINGS_ENCRYPTION_KEY=Ismola2002!!
+      - SETTINGS_ENCRYPTION_KEY=${SETTINGS_ENCRYPTION_KEY}
       - CLI_ARGS= #optional
-      - DUPLICATI__WEBSERVICE_PASSWORD=Ismola2002!!
+      - DUPLICATI__WEBSERVICE_PASSWORD=${DUPLICATI__WEBSERVICE_PASSWORD}
     volumes:
       - /volume1/docker/duplicati/config:/config     
       - /mnt/@usb/sda1/Volumen1/backups:/backups
