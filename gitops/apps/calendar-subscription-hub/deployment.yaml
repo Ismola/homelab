@@ -1,0 +1,316 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calendar-subscription-hub-config
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  HOSTNAME: "0.0.0.0"
+
+  REDIS_URL: "redis://redis:6379"
+  APP_BASE_URL: "https://calendar-subscription-hub.ismola.dev"
+
+  ASISMETRO_API_BASE_URL: "http://asismetro-automations:3000"
+
+  APP_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
+  SESSION_SECRET: "dev-session-secret"
+
+  ASISMETRO_BEARER_TOKEN: "sample"
+  VALID_TOKEN: "sample"
+
+  DEFAULT_REFRESH_MINUTES: "360"
+  STAGE: "production"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asismetro-automations
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app: asismetro-automations
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: asismetro-automations
+  template:
+    metadata:
+      labels:
+        app: asismetro-automations
+    spec:
+      containers:
+        - name: asismetro-automations
+          image: ghcr.io/ismola/asismetro-automations:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: STAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: calendar-subscription-hub-config
+                  key: STAGE
+            - name: VALID_TOKEN
+              valueFrom:
+                configMapKeyRef:
+                  name: calendar-subscription-hub-config
+                  key: VALID_TOKEN
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: temp-downloads
+              mountPath: /app/temp_downloads
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: temp-downloads
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: asismetro-automations
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  type: ClusterIP
+  selector:
+    app: asismetro-automations
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: calendar-subscription-hub-migrate
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/ismola/calendar-subscription-hub:migrate-main
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: calendar-subscription-hub-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-subscription-hub-db
+                  key: DATABASE_URL
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendar-subscription-hub-web
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app: calendar-subscription-hub-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: calendar-subscription-hub-web
+  template:
+    metadata:
+      labels:
+        app: calendar-subscription-hub-web
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/ismola/calendar-subscription-hub:web-main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: calendar-subscription-hub-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-subscription-hub-db
+                  key: DATABASE_URL
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar-subscription-hub-web
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: ClusterIP
+  selector:
+    app: calendar-subscription-hub-web
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendar-subscription-hub-worker
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app: calendar-subscription-hub-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: calendar-subscription-hub-worker
+  template:
+    metadata:
+      labels:
+        app: calendar-subscription-hub-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/ismola/calendar-subscription-hub:worker-main
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: calendar-subscription-hub-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: calendar-subscription-hub-db
+                  key: DATABASE_URL
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: calendar-subscription-hub
+  namespace: calendar-subscription-hub
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: calendar-subscription-hub.ismola.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: calendar-subscription-hub-web
+                port:
+                  number: 3000
