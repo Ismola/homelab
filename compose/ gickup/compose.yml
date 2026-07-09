@@ -1,0 +1,9 @@
+services:
+  gickup:
+    image: buddyspencer/gickup:latest
+    container_name: gickup
+    restart: unless-stopped
+    volumes:
+      - /volume1/docker/gickup/conf.yml:/gickup/conf.yml # Change the path of your local config ${PWD} is your current directory (where the docker-compose.yml is located)
+      - "/volume1/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4 Archives/Backup/GitHub:/backups"
+    command: ["/gickup/conf.yml"]

@@ -1,0 +1,12 @@
+source:
+  github:
+    - token: "ghp_xxx"
+      user: "ismola"
+
+destination:
+  local:
+    - path: /backups
+      structured: true
+      mirror: true
+      bare: true
+cron: 0 22 * * * # optional - when cron is not provided, the program runs once and exits
