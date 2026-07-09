@@ -10,4 +10,4 @@ images:
   - name: ghcr.io/ismola/s-j-wedding
     newTag: main
     newName: ghcr.io/ismola/s-j-wedding
-    digest: sha256:28acfb891f6583e8ba132715045a66997c7c828d39e2994834ef2f079a2ab170
+    digest: sha256:a79d94d60662754847df145d67803137409e7f71487d90fe731f3431b35d2d34
