@@ -1,0 +1,109 @@
+commands:
+  dry_run: false
+  tag_nohardlinks: true
+  share_limits: true
+  skip_cleanup: false
+  recheck: false
+  cat_update: false
+  tag_update: true
+  rem_unregistered: true
+  tag_tracker_error: true
+  rem_orphaned: true
+  skip_qb_version_check: false
+
+qbt:
+  host: qbittorrent:8585
+  user: admin
+  pass: XXXXXXXXXXXXX
+
+settings:
+  force_auto_tmm: true
+  tracker_error_tag: issue
+  nohardlinks_tag: noHL
+  stalled_tag: stalledDL
+  tag_nohardlinks_filter_completed: true
+  share_limits_filter_completed: false
+  share_limits_tag: ~share_limit
+  share_limits_min_seeding_time_tag: MinSeedTimeNotReached
+  share_limits_min_num_seeds_tag: MinSeedsNotMet
+  share_limits_last_active_tag: LastActiveLimitNotReached
+  cat_filter_completed: true
+  rem_unregistered_filter_completed: false
+  cat_update_all: true
+  disable_qbt_default_share_limits: true
+  tag_stalled_torrents: true
+  rem_unregistered_grace_minutes: 10
+  rem_unregistered_max_torrents: 0
+
+  private_tag:
+  force_auto_tmm_ignore_tags: []
+  rem_unregistered_ignore_list: []
+directory:
+  root_dir: /media/qbittorrent
+  recycle_bin: /recycle_bin
+  orphaned_dir: /media/qbittorrent/orphaned_data
+
+  torrents_dir:
+cat:
+  Peliculas: /media/qbittorrent/Peliculas
+  Series: /media/qbittorrent/Series
+
+tracker:
+  other:
+    tag:
+    - otros
+nohardlinks:
+  Peliculas:
+    ignore_root_dir: true
+  Series:
+    ignore_root_dir: true
+
+share_limits:
+  limpieza_stalledDL:
+    priority: 1
+    include_all_tags:
+    - stalledDL
+    categories:
+    - Peliculas
+    - Series
+    cleanup: true
+    max_last_active: 72h
+  limpieza_noHL:
+    priority: 2
+    include_all_tags:
+    - noHL
+    categories:
+    - Peliculas
+    - Series
+    cleanup: true
+    max_seeding_time: 1m
+    max_ratio: -1
+    share_limit_action: Default
+
+recyclebin:
+  enabled: false
+  save_torrents: false
+  split_by_category: false
+  empty_after_x_days: 0
+
+orphaned:
+  max_orphaned_files_to_delete: 50
+  min_file_age_minutes: 0
+  empty_after_x_days: 0
+
+  exclude_patterns:
+webhooks:
+  error:
+  run_start:
+  run_end:
+  function:
+    recheck:
+    cat_update:
+    tag_update:
+    rem_unregistered:
+    tag_tracker_error:
+    rem_orphaned:
+    tag_nohardlinks:
+    share_limits:
+    cleanup_dirs:
+
