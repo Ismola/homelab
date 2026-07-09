@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+
+images:
+  - name: ghcr.io/ismola/asismetro-automations
+    newTag: main
+
+  - name: ghcr.io/ismola/calendar-subscription-hub-web
+    newTag: main
+
+  - name: ghcr.io/ismola/calendar-subscription-hub-worker
+    newTag: main

@@ -167,6 +167,7 @@ spec:
       port: 3000
       targetPort: 3000
 
+
 # ---
 # apiVersion: batch/v1
 # kind: Job
@@ -216,7 +217,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: ghcr.io/ismola/calendar-subscription-hub:web-main
+          image: ghcr.io/ismola/calendar-subscription-hub-web:main
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -279,7 +280,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: ghcr.io/ismola/calendar-subscription-hub:worker-main
+          image: ghcr.io/ismola/calendar-subscription-hub-worker:main
           imagePullPolicy: Always
           envFrom:
             - configMapRef:

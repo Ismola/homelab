@@ -1,0 +1,138 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: homelab-image-updater
+  namespace: argocd
+spec:
+  writeBackConfig:
+    method: git
+    gitConfig:
+      branch: main
+      writeBackTarget: kustomization
+
+  commonUpdateSettings:
+    updateStrategy: digest
+
+  applicationRefs:
+    - namePattern: portfolio
+      images:
+        - alias: portfolio
+          imageName: ghcr.io/ismola/personal-portfolio:master
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/personal-portfolio
+
+    - namePattern: zip-hider
+      images:
+        - alias: ziphider
+          imageName: ghcr.io/ismola/zip-hider:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/zip-hider
+    - namePattern: trivial-php
+      images:
+        - alias: trivialphp
+          imageName: ghcr.io/ismola/trivial-php:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/trivial-php
+
+    - namePattern: african-art-exhibition-concept
+      images:
+        - alias: africanartexhibitionconcept
+          imageName: ghcr.io/ismola/african-art-exhibition-concept:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/african-art-exhibition-concept
+
+    - namePattern: apple-concept
+      images:
+        - alias: appleconcept
+          imageName: ghcr.io/ismola/apple-concept:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/apple-concept
+
+    - namePattern: cakeshop-concept
+      images:
+        - alias: cakeshopconcept
+          imageName: ghcr.io/ismola/cakeshop-concept:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/cakeshop-concept
+
+    - namePattern: calendar-subscription-hub
+      images:
+        - alias: asismetro
+          imageName: ghcr.io/ismola/asismetro-automations:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/asismetro-automations
+
+        - alias: web
+          imageName: ghcr.io/ismola/calendar-subscription-hub-web:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/calendar-subscription-hub-web
+
+        - alias: worker
+          imageName: ghcr.io/ismola/calendar-subscription-hub-worker:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/calendar-subscription-hub-worker
+
+    - namePattern: gott-calculator
+      images:
+        - alias: gottcalculator
+          imageName: ghcr.io/ismola/gott-calculator:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/gott-calculator
+
+    - namePattern: japon-landing-concept
+      images:
+        - alias: japonlandingconcept
+          imageName: ghcr.io/ismola/japon-landing-concept:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/japon-landing-concept
+
+    - namePattern: js-snake
+      images:
+        - alias: jssnake
+          imageName: ghcr.io/ismola/js-snake:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/js-snake
+
+    - namePattern: jw-hitster
+      images:
+        - alias: jwhitster
+          imageName: ghcr.io/ismola/jw-hitster:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/jw-hitster
+
+    - namePattern: pro-login-animacion
+      images:
+        - alias: prologinanimacion
+          imageName: ghcr.io/ismola/pro-login-animacion:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/pro-login-animacion
+
+    - namePattern: sj-wedding
+      images:
+        - alias: sjwedding
+          imageName: ghcr.io/ismola/s-j-wedding:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/s-j-wedding
+
+    - namePattern: template-next
+      images:
+        - alias: templatenext
+          imageName: ghcr.io/ismola/template-next:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/template-next
