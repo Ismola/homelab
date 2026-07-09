@@ -7,6 +7,8 @@ metadata:
     app: african-art-exhibition-concept
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 120
   selector:
     matchLabels:
       app: african-art-exhibition-concept

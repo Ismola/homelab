@@ -98,6 +98,8 @@ metadata:
     app: asismetro-automations
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 120
   selector:
     matchLabels:
       app: asismetro-automations
@@ -207,6 +209,8 @@ metadata:
     app: calendar-subscription-hub-web
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 120
   selector:
     matchLabels:
       app: calendar-subscription-hub-web
@@ -270,6 +274,8 @@ metadata:
     app: calendar-subscription-hub-worker
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 120
   selector:
     matchLabels:
       app: calendar-subscription-hub-worker

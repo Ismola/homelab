@@ -1,45 +1,47 @@
 # apiVersion: apps/v1
 # kind: Deployment
 # metadata:
-#   name: portfolio
-#   namespace: portfolio
-#   labels:
-#     app: portfolio
-# spec:
-#   replicas: 1
-#   selector:
-#     matchLabels:
-#       app: portfolio
-#   template:
-#     metadata:
+#       name: portfolio
+#       namespace: portfolio
 #       labels:
-#         app: portfolio
-#     spec:
-#       containers:
-#         - name: portfolio
-#           image: ghcr.io/ismola/personal-portfolio:master
-#           imagePullPolicy: Always
-#           ports:
-#             - containerPort: 4321
-          # env:
-          #   - name: HOST
-          #     value: "0.0.0.0"
-          #   - name: PORT
-          #     value: "80"
-          #   - name: MONGO_DB_NAME
-          #     value: "sj_wedding"
-          #   - name: MONGO_URI
-          #     valueFrom:
-          #       secretKeyRef:
-          #         name: sj-wedding-secrets
-          #         key: MONGO_URI
-    # resources:
-    #         requests:
-    #           cpu: "50m"
-    #           memory: "64Mi"
-    #         limits:
-    #           cpu: "500m"
-    #           memory: "256Mi"
+#             app: portfolio
+# spec:
+#       replicas: 1
+
+#       revisionHistoryLimit: 2
+#       progressDeadlineSeconds: 120
 
 
-
+#       selector:
+#             matchLabels:
+#                   app: portfolio
+#       template:
+#             metadata:
+#                   labels:
+#                         app: portfolio
+#             spec:
+#                   containers:
+#                         - name: portfolio
+#                           image: ghcr.io/ismola/personal-portfolio:master
+#                           imagePullPolicy: Always
+#                           ports:
+#                                 - containerPort: 4321
+#                           env:
+#                                 - name: HOST
+#                                   value: "0.0.0.0"
+#                                 - name: PORT
+#                                   value: "80"
+#                                 - name: MONGO_DB_NAME
+#                                   value: "sj_wedding"
+#                                 - name: MONGO_URI
+#                                   valueFrom:
+#                                         secretKeyRef:
+#                                               name: sj-wedding-secrets
+#                                               key: MONGO_URI
+#             resources:
+#                   requests:
+#                         cpu: "50m"
+#                         memory: "64Mi"
+#                   limits:
+#                         cpu: "500m"
+#                         memory: "256Mi"

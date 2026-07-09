@@ -5,6 +5,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  - limitrange.yaml
 images:
   - name: ghcr.io/ismola/japon-landing-concept
     newTag: main

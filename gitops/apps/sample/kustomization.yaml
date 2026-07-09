@@ -6,6 +6,7 @@
 #   - deployment.yaml
 #   - service.yaml
 #   - ingress.yaml
+#   - limitrange.yaml
 
 # images:
 #   - name: ghcr.io/ismola/pro-login-animacion

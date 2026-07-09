@@ -7,6 +7,8 @@ metadata:
     app: jw-hitster
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 120
   selector:
     matchLabels:
       app: jw-hitster

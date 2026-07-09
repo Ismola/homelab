@@ -5,6 +5,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  - limitrange.yaml
 images:
   - name: ghcr.io/ismola/cakeshop-concept
     newTag: main
