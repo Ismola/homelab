@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/apple-concept
     newTag: main
+    newName: ghcr.io/ismola/apple-concept
+    digest: sha256:0fc3eb02e29600cb3fcbd4740bf42d999e489e6caefa02a46a188bf453fb8a75
