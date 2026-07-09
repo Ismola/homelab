@@ -25,7 +25,7 @@ services:
     container_name: ts_resolve_db
     hostname: resolve-db  # <--- Este será el nombre que pongas en DaVinci Resolve
     environment:
-      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_AUTHKEY=tskey-auth-kS84nc9eiK11CNTRL-YnU4qdReCg16KEQ1wYUwf1FP46e3Thxqi
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_USERSPACE=false
     volumes:      
@@ -40,7 +40,7 @@ services:
     user: "0:0"
     container_name: resolve_pgsql
     image: postgres:13
-    restart: always
+    restart: unless-stopped
     network_mode: "service:ts-postgres" # <--- Usa la red de Tailscale
     environment:
       <<: [*db-environment]
@@ -54,10 +54,11 @@ services:
     user: "0:0"
     container_name: resolve_pgbackup
     image: prodrigestivill/postgres-backup-local:13
-    restart: always
+    
+    restart: unless-stopped
     network_mode: "service:ts-postgres" # <--- También en la misma red
     volumes:
-      - ${DOCKER_PATH}/davinci/backups:/backups
+      - "/volume1/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4 Archives/Backup/DaVinci/Automatic:/backups"
     depends_on:
       - postgres
     environment:
@@ -65,17 +66,18 @@ services:
       POSTGRES_HOST: localhost # Al estar en la misma red, es localhost
       POSTGRES_EXTRA_OPTS: --blobs --format=custom --quote-all-identifiers
       BACKUP_SUFFIX: .backup
+      BACKUP_ON_START: true
 
-  # 4. pgAdmin para gestión (Este sí lo mapeamos al puerto 3001 del host)
-  pgadmin:
-    user: "0:0"
-    container_name: resolve_pgadmin
-    image: dpage/pgadmin4
-    restart: always
-    ports:
-      - "3001:80"
-    environment:
-      <<: [*admin-environment]
-    depends_on:
-      - postgres
+  # # 4. pgAdmin para gestión (Este sí lo mapeamos al puerto 3001 del host)
+  # pgadmin:
+  #   user: "0:0"
+  #   container_name: resolve_pgadmin
+  #   image: dpage/pgadmin4
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3001:80"
+  #   environment:
+  #     <<: [*admin-environment]
+  #   depends_on:
+  #     - postgres
     # Nota: pgAdmin puede estar en red bridge normal para acceder por IP:3001
