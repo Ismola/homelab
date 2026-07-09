@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/zip-hider
     newTag: main
+    newName: ghcr.io/ismola/zip-hider
+    digest: sha256:8e4eac3bb30625890246efc6997e2b905d6980f367eb093ed2ae9ca37e3300e8
