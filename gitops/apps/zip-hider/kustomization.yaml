@@ -10,4 +10,4 @@ images:
   - name: ghcr.io/ismola/zip-hider
     newTag: main
     newName: ghcr.io/ismola/zip-hider
-    digest: sha256:8e4eac3bb30625890246efc6997e2b905d6980f367eb093ed2ae9ca37e3300e8
+    digest: sha256:13b2689711697b334807b2994c446315f29d739b9c87bc976aa32cccfab223d4
