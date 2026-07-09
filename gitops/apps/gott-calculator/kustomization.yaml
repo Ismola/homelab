@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/gott-calculator
     newTag: main
+    newName: ghcr.io/ismola/gott-calculator
+    digest: sha256:d2e22d88d4cf83e5d554894c24dc8fbd1b40ab6a6e40fda9468b3555d583e4ba
