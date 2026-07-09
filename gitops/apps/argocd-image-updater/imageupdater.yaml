@@ -5,10 +5,11 @@ metadata:
   namespace: argocd
 spec:
   writeBackConfig:
-    method: git
-    gitConfig:
-      branch: main
-      writeBackTarget: kustomization
+  method: git:secret:argocd/git-creds
+  gitConfig:
+    repository: https://github.com/Ismola/homelab.git
+    branch: main
+    writeBackTarget: kustomization
 
   commonUpdateSettings:
     updateStrategy: digest
