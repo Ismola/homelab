@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/pro-login-animacion
     newTag: main
+    newName: ghcr.io/ismola/pro-login-animacion
+    digest: sha256:33acf0a69d7c9cf7299c553d0a6c7f2a4ce06f1abef12fef8fa73b35a5047bae
