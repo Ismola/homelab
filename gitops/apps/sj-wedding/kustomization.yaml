@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/s-j-wedding
     newTag: main
+    newName: ghcr.io/ismola/s-j-wedding
+    digest: sha256:b15a0b951422b6c7bfb1ce71e1e02a30e7d8e6a1d3b2fc82ef2300f4950c6c54
