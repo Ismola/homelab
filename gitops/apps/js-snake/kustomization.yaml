@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/js-snake
     newTag: main
+    newName: ghcr.io/ismola/js-snake
+    digest: sha256:fa7951be30942885d779f747d5c563a1eb742574046fb8fc1e8670e571be0e0b
