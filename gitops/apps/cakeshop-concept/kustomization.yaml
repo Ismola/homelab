@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/cakeshop-concept
     newTag: main
+    newName: ghcr.io/ismola/cakeshop-concept
+    digest: sha256:40d8c0b9be2816b399aa719fc47a428117876ee62094ec874ba228402d859e38
