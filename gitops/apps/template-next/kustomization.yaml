@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespace.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
-
 images:
   - name: ghcr.io/ismola/template-next
     newTag: main
+    newName: ghcr.io/ismola/template-next
+    digest: sha256:cbd1fcbd539637479f0fe9c7447f61d323782d2ab78f26b17db2a756c146dd10
