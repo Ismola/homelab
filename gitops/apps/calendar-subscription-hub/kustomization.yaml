@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - limitrange.yaml
+  - hpa.yml
 images:
   - name: ghcr.io/ismola/asismetro-automations
     newTag: main

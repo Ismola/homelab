@@ -6,6 +6,7 @@ resources:
   - service.yaml
   - ingress.yaml
   - limitrange.yaml
+  - hpa.yml
 images:
   - name: ghcr.io/ismola/template-next
     newTag: main
