@@ -54,68 +54,68 @@ Esto implica que:
 
 ```mermaid
 flowchart TB
-	UserInternet["Clientes"]
-	CFDNS["Cloudflare DNS"]
-	CFTunnel["Cloudflare Tunnel"]
-	Tailnet["Tailscale Tailnet"]
+ UserInternet["Clientes"]
+ CFDNS["Cloudflare DNS"]
+ CFTunnel["Cloudflare Tunnel"]
+ Tailnet["Tailscale Tailnet"]
 
-	subgraph Local[Entorno local]
-		NAS["NAS\nTailscale\nPi-hole\nNPM"]
-	end
+ subgraph Local[Entorno local]
+  NAS["NAS\nTailscale\nPi-hole\nNPM"]
+ end
 
-	subgraph Oracle[Oracle Cloud]
-		V1["v1\n1 vCPU\n1 GB RAM\nServicios"]
-		V2["v2\n1 vCPU\n1 GB RAM\nServicios"]
-		V3["v3\n4 vCPU ARM\n24 GB RAM\nServicios"]
-	end
+ subgraph Oracle[Oracle Cloud]
+  V1["v1\n1 vCPU\n1 GB RAM\nServicios"]
+  V2["v2\n1 vCPU\n1 GB RAM\nServicios"]
+  V3["v3\n4 vCPU ARM\n24 GB RAM\nServicios"]
+ end
 
-	subgraph Google[Google Cloud]
-		V4["v4\n1 vCPU\n1 GB RAM\nServicios"]
-	end
+ subgraph Google[Google Cloud]
+  V4["v4\n1 vCPU\n1 GB RAM\nServicios"]
+ end
 
-	UserInternet --> CFDNS --> CFTunnel
+ UserInternet --> CFDNS --> CFTunnel
 
-	Tailnet --- NAS
-	Tailnet --- V1
-	Tailnet --- V2
-	Tailnet --- V3
-	Tailnet --- V4
+ Tailnet --- NAS
+ Tailnet --- V1
+ Tailnet --- V2
+ Tailnet --- V3
+ Tailnet --- V4
 
-	CFTunnel --> NAS
-	CFTunnel --> V1
-	CFTunnel --> V2
-	CFTunnel --> V3
-	CFTunnel --> V4
+ CFTunnel --> NAS
+ CFTunnel --> V1
+ CFTunnel --> V2
+ CFTunnel --> V3
+ CFTunnel --> V4
 ```
 
 ## Diagrama 2. Vista De Servidores
 
 ```mermaid
 flowchart LR
-	subgraph NASLocal[NAS local]
-		PiHole["Pi-hole"]
-		NPM["Nginx Proxy Manager"]
-		NASServices["Servicios locales\nPlex\nImmich\nOpenCloud\nOtros"]
-		NPM --> NASServices
-	end
+ subgraph NASLocal[NAS local]
+  PiHole["Pi-hole"]
+  NPM["Nginx Proxy Manager"]
+  NASServices["Servicios locales\nPlex\nImmich\nOpenCloud\nOtros"]
+  NPM --> NASServices
+ end
 
-	subgraph OracleCloud[Oracle Cloud]
-		V1Srv["v1\n1 vCPU / 1 GB"]
-		S1["Servicios v1"]
-		V2Srv["v2\n1 vCPU / 1 GB"]
-		S2["Servicios v2"]
-		V3Srv["v3\n4 vCPU ARM / 24 GB"]
-		S3["Servicios v3"]
-		V1Srv --> S1
-		V2Srv --> S2
-		V3Srv --> S3
-	end
+ subgraph OracleCloud[Oracle Cloud]
+  V1Srv["v1\n1 vCPU / 1 GB"]
+  S1["Servicios v1"]
+  V2Srv["v2\n1 vCPU / 1 GB"]
+  S2["Servicios v2"]
+  V3Srv["v3\n4 vCPU ARM / 24 GB"]
+  S3["Servicios v3"]
+  V1Srv --> S1
+  V2Srv --> S2
+  V3Srv --> S3
+ end
 
-	subgraph GoogleCloud[Google Cloud]
-		V4Srv["v4\n1 vCPU / 1 GB"]
-		S4["Servicios v4"]
-		V4Srv --> S4
-	end
+ subgraph GoogleCloud[Google Cloud]
+  V4Srv["v4\n1 vCPU / 1 GB"]
+  S4["Servicios v4"]
+  V4Srv --> S4
+ end
 ```
 
 ## Diagrama 3. Ruta Pública De Acceso
@@ -124,22 +124,22 @@ Todas las VPS y el NAS pueden publicar servicios de forma pública por Cloudflar
 
 ```mermaid
 flowchart LR
-	PublicClient["Cliente sin Tailscale"]
-	CFDNS["Cloudflare DNS"]
-	CFTunnel["Cloudflare Tunnel"]
-	Target{"Destino del servicio"}
-	NAS["NAS"]
-	V1["v1"]
-	V2["v2"]
-	V3["v3"]
-	V4["v4"]
+ PublicClient["Cliente sin Tailscale"]
+ CFDNS["Cloudflare DNS"]
+ CFTunnel["Cloudflare Tunnel"]
+ Target{"Destino del servicio"}
+ NAS["NAS"]
+ V1["v1"]
+ V2["v2"]
+ V3["v3"]
+ V4["v4"]
 
-	PublicClient --> CFDNS --> CFTunnel --> Target
-	Target --> NAS
-	Target --> V1
-	Target --> V2
-	Target --> V3
-	Target --> V4
+ PublicClient --> CFDNS --> CFTunnel --> Target
+ Target --> NAS
+ Target --> V1
+ Target --> V2
+ Target --> V3
+ Target --> V4
 ```
 
 ## Diagrama 4. Ruta Privada Con Split DNS
@@ -148,20 +148,20 @@ Solo `plex.ismola.dev`, `immich.ismola.dev` y `opencloud.ismola.dev` siguen esta
 
 ```mermaid
 flowchart LR
-	TSClient["Cliente con Tailscale"]
-	SplitDNS["Tailscale Split DNS"]
-	PiHole["Pi-hole en NAS"]
-	NPM["NPM en NAS"]
-	Plex["Plex"]
-	Immich["Immich"]
-	OpenCloud["OpenCloud"]
+ TSClient["Cliente con Tailscale"]
+ SplitDNS["Tailscale Split DNS"]
+ PiHole["Pi-hole en NAS"]
+ NPM["NPM en NAS"]
+ Plex["Plex"]
+ Immich["Immich"]
+ OpenCloud["OpenCloud"]
 
-	TSClient -->|"Consulta DNS"| SplitDNS --> PiHole
-	PiHole -->|"Responde con IP privada del NAS"| TSClient
-	TSClient -->|"HTTPS al hostname"| NPM
-	NPM --> Plex
-	NPM --> Immich
-	NPM --> OpenCloud
+ TSClient -->|"Consulta DNS"| SplitDNS --> PiHole
+ PiHole -->|"Responde con IP privada del NAS"| TSClient
+ TSClient -->|"HTTPS al hostname"| NPM
+ NPM --> Plex
+ NPM --> Immich
+ NPM --> OpenCloud
 ```
 
 ## Diagrama 5. Decisión De Resolución DNS
@@ -170,18 +170,18 @@ Este es el comportamiento esperado para los subdominios de `ismola.dev`.
 
 ```mermaid
 flowchart TD
-	Query["Consulta DNS de subdominio de ismola.dev"]
-	Split{"Servicio con ruta privada por Tailscale"}
-	PiHole["Pi-hole del NAS"]
-	NPM["NPM del NAS"]
-	LocalService["Servicio local correspondiente"]
-	CFDNS["Cloudflare DNS"]
-	CFTunnel["Cloudflare Tunnel"]
-	RemoteTarget["Servicio publicado en NAS, v1, v2, v3 o v4"]
+ Query["Consulta DNS de subdominio de ismola.dev"]
+ Split{"Servicio con ruta privada por Tailscale"}
+ PiHole["Pi-hole del NAS"]
+ NPM["NPM del NAS"]
+ LocalService["Servicio local correspondiente"]
+ CFDNS["Cloudflare DNS"]
+ CFTunnel["Cloudflare Tunnel"]
+ RemoteTarget["Servicio publicado en NAS, v1, v2, v3 o v4"]
 
-	Query --> Split
-	Split -->|"Si"| PiHole --> NPM --> LocalService
-	Split -->|"No"| CFDNS --> CFTunnel --> RemoteTarget
+ Query --> Split
+ Split -->|"Si"| PiHole --> NPM --> LocalService
+ Split -->|"No"| CFDNS --> CFTunnel --> RemoteTarget
 ```
 
 ## Modelo De Acceso
