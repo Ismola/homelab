@@ -92,10 +92,6 @@ kind: Deployment
 metadata:
   name: asismetro-automations
   namespace: calendar-subscription-hub
-  annotations:
-    argocd.argoproj.io/sync-wave: "-3"
-  labels:
-    app: asismetro-automations
 spec:
   replicas: 1
   revisionHistoryLimit: 2
@@ -125,32 +121,54 @@ spec:
                 configMapKeyRef:
                   name: calendar-subscription-hub-config
                   key: VALID_TOKEN
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 2Gi
+
           volumeMounts:
             - name: logs
               mountPath: /app/logs
             - name: temp-downloads
               mountPath: /app/temp_downloads
-          readinessProbe:
-            httpGet:
-              path: /
+            - name: dshm
+              mountPath: /dev/shm
+          startupProbe:
+            tcpSocket:
               port: 3000
-            initialDelaySeconds: 40
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: 3000
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 3
             failureThreshold: 3
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 3000
-            initialDelaySeconds: 60
             periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 3
+            timeoutSeconds: 5
+            failureThreshold: 6
       volumes:
         - name: logs
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 512Mi
         - name: temp-downloads
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
 
 ---
 apiVersion: v1
