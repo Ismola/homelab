@@ -6,11 +6,10 @@
 #       labels:
 #             app: portfolio
 # spec:
-#       replicas: 1
+#
 
 #       revisionHistoryLimit: 2
 #       progressDeadlineSeconds: 120
-
 
 #       selector:
 #             matchLabels:

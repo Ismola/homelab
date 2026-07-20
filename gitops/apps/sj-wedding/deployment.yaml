@@ -6,7 +6,6 @@ metadata:
   labels:
     app: sj-wedding
 spec:
-  replicas: 1
   revisionHistoryLimit: 2
   progressDeadlineSeconds: 120
   selector:
@@ -35,7 +34,3 @@ spec:
                 secretKeyRef:
                   name: sj-wedding-secrets
                   key: MONGO_URI
-
-
-
-

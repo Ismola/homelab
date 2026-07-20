@@ -7,7 +7,7 @@
 #     apiVersion: apps/v1
 #     kind: Deployment
 #     name: quotes-deployment
-#   minReplicas: 1
+#   minReplicas: 2
 #   maxReplicas: 10
 #   metrics:
 #   - type: Resource
