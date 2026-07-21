@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/personal-portfolio
     newTag: master
     newName: ghcr.io/ismola/personal-portfolio
-    digest: sha256:9c06bae5e109079068023bf399fc2a02240afd78aba24f69789407d96f1360a3
+    digest: sha256:e7e5772dbcfd53d66d99b29f40617d2f15e2645ef642872ef5d6b847f43f134d
