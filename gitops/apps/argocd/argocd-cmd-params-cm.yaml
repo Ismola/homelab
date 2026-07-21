@@ -1,0 +1,11 @@
+git add gitops/apps/argocd
+
+git commit -m "Expose Argo CD through Tailscale and Cloudflare"
+
+git push origin mainapiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  namespace: argocd
+data:
+  server.insecure: "true"
