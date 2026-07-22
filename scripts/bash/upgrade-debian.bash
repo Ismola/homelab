@@ -1,0 +1,1 @@
+apt update && apt -y full-upgrade && apt -y autoremove --purge && apt -y autoclean
