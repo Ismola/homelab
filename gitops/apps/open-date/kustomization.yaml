@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/open-date
     newTag: main
     newName: ghcr.io/ismola/open-date
-    digest: sha256:616ba0cad68c005aac3356da3a2c8216b47537983d083219e0ef6351e824ec5d
+    digest: sha256:6630f0a9ceed504a1b77dd509e1ae1fced7c3c34d10550af6316f01bdc0f2166
