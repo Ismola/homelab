@@ -21,7 +21,7 @@ spec:
           image: ghcr.io/ismola/open-date:main
           imagePullPolicy: Always
           ports:
-            - containerPort: 80
+            - containerPort: 3000
           env:
             # Public
             - name: MONGODB_DATABASE
