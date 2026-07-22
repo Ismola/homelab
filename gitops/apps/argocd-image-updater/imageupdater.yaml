@@ -153,3 +153,11 @@ spec:
           manifestTargets:
             kustomize:
               name: ghcr.io/headlamp-k8s/headlamp
+    
+    - namePattern: "open-date"
+      images:
+        - alias: templatenext
+          imageName: ghcr.io/ismola/open-date:main
+          manifestTargets:
+            kustomize:
+              name: ghcr.io/ismola/open-date

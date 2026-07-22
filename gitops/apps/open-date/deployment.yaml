@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-date
+  namespace: open-date
+  labels:
+    app: open-date
+spec:
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 120
+  selector:
+    matchLabels:
+      app: open-date
+  template:
+    metadata:
+      labels:
+        app: open-date
+    spec:
+      containers:
+        - name: open-date
+          image: ghcr.io/ismola/open-date:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            # Public
+            - name: MONGODB_DATABASE
+              value: "open_date"
+            - name: SESSION_COOKIE_NAME
+              value: "open_date_session"
+            - name: NEXT_PUBLIC_APP_URL
+              value: "https://open-date.ismola.dev"
+            - name: ADMIN_EMAIL_DOMAIN
+              value: "ismola.dev"
+            - name: MAX_UPLOAD_MB
+              value: "8"
+            - name: S3_REGION
+              value: "auto"
+            - name: S3_BUCKET
+              value: "open-date"
+            - name: PORT
+              value: "3000"
+            # Private
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: open-date-secrets
+                  key: MONGODB_URI
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: open-date-secrets
+                  key: AUTH_SECRET
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: open-date-secrets
+                  key: S3_ACCESS_KEY_ID
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: open-date-secrets
+                  key: S3_SECRET_ACCESS_KEY
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: open-date-secrets
+                  key: S3_ENDPOINT
+            - name: S3_PUBLIC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: open-date-secrets
+                  key: S3_PUBLIC_URL
