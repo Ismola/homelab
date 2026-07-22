@@ -10,5 +10,3 @@ resources:
 images:
   - name: ghcr.io/ismola/open-date
     newTag: main
-    newName: ghcr.io/ismola/open-date
-    digest: main
