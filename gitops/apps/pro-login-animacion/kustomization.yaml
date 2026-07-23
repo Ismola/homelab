@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/pro-login-animacion
     newTag: main
     newName: ghcr.io/ismola/pro-login-animacion
-    digest: sha256:4ea3d3c1cc6679f303d8f3b849addf85f182c3b5c704feeacc98c14651520c72
+    digest: sha256:ca94b598bc5aec92c4e82f55b4b82581bf5134cf78b83a41bf914490cff2dc78
