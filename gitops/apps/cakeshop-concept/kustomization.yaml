@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/cakeshop-concept
     newTag: main
     newName: ghcr.io/ismola/cakeshop-concept
-    digest: sha256:40d8c0b9be2816b399aa719fc47a428117876ee62094ec874ba228402d859e38
+    digest: sha256:96ec2a01972c60e3ca4f1d01f30847b49c7f098a37b0b3739acd2161dbf3ebb0
