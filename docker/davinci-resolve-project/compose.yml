@@ -3,8 +3,8 @@ version: "3.8"
 x-common:
   database: &db-environment
     POSTGRES_DB: h0
-    POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: DaVinci
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     TZ: Europe/Madrid
 
   backup: &backup-environment
@@ -15,8 +15,8 @@ x-common:
     BACKUP_LOCATION: /backups
 
   admin: &admin-environment
-    PGADMIN_DEFAULT_EMAIL: admin@admin.com
-    PGADMIN_DEFAULT_PASSWORD: root
+    PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+    PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
 
 services:
   # 1. El "Sidecar" de Tailscale: Actúa como la tarjeta de red para Postgres

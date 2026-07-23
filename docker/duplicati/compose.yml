@@ -11,7 +11,7 @@ services:
       - CLI_ARGS= #optional
       - DUPLICATI__WEBSERVICE_PASSWORD=${DUPLICATI__WEBSERVICE_PASSWORD}
     volumes:
-      - /volume1/docker/duplicati/config:/config     
+      - /volume1/docker/duplicati/config:/config
       - /mnt/@usb/sda1/Volumen1/backups:/backups
       - /volume1:/source
     ports:
