@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/gott-calculator
     newTag: main
     newName: ghcr.io/ismola/gott-calculator
-    digest: sha256:d2e22d88d4cf83e5d554894c24dc8fbd1b40ab6a6e40fda9468b3555d583e4ba
+    digest: sha256:085c311dc4b0ec07693325e6b59acf6810f50f5d6ed740eabedc92040b0a6c21
