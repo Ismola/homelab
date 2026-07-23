@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/apple-concept
     newTag: main
     newName: ghcr.io/ismola/apple-concept
-    digest: sha256:0fc3eb02e29600cb3fcbd4740bf42d999e489e6caefa02a46a188bf453fb8a75
+    digest: sha256:2b8334cc8ef3751a1c80fb83f1373239c76d31755291447350b5ab1719fe46db
