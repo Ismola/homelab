@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/japon-landing-concept
     newTag: main
     newName: ghcr.io/ismola/japon-landing-concept
-    digest: sha256:b21e73f7c14b3dc7c8ad240bc2ee10803a01d8cbcb6160ac5dbbc3e3e1fd6190
+    digest: sha256:e831026aadcbfe68ec89a485324444ffc45396d3d3cfa842b82f40f72d409e38
