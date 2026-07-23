@@ -5,6 +5,7 @@ namespace: headlamp
 
 resources:
   - serviceaccount.yaml
+  - limitrange.yaml
   - deployment.yaml
   - service.yaml
   - ingress-tailscale.yaml

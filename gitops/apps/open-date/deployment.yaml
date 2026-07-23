@@ -71,3 +71,12 @@ spec:
                 secretKeyRef:
                   name: open-date-secrets
                   key: S3_PUBLIC_URL
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+              ephemeral-storage: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+              ephemeral-storage: 1Gi

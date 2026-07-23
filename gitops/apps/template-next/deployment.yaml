@@ -22,3 +22,12 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
+          resources:
+            requests:
+              cpu: 25m
+              memory: 192Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 300m
+              memory: 384Mi
+              ephemeral-storage: 512Mi

@@ -36,3 +36,12 @@ spec:
                 secretKeyRef:
                   name: cloudflared-token
                   key: token
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+              ephemeral-storage: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+              ephemeral-storage: 256Mi

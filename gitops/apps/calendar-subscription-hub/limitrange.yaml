@@ -7,10 +7,18 @@ spec:
   limits:
     - type: Container
       defaultRequest:
-        cpu: 50m
-        memory: 192Mi
+        cpu: 25m
+        memory: 64Mi
         ephemeral-storage: 64Mi
       default:
-        cpu: 500m
-        memory: 256Mi
+        cpu: 300m
+        memory: 384Mi
         ephemeral-storage: 512Mi
+      min:
+        cpu: 5m
+        memory: 8Mi
+        ephemeral-storage: 16Mi
+      max:
+        cpu: "2"
+        memory: 2Gi
+        ephemeral-storage: 4Gi
