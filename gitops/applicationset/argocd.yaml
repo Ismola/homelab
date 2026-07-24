@@ -40,3 +40,17 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+
+  # Los CRDs de kube-prometheus-stack superan el límite de 256 KiB de la
+  # anotación usada por client-side apply. Para monitoring evitamos esa fase
+  # de migración y dejamos que Argo CD los gestione directamente con SSA.
+  templatePatch: |
+    {{- if eq .path.basenameNormalized "monitoring" }}
+    spec:
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - DisableClientSideApplyMigration=true
+          - SkipDryRunOnMissingResource=true
+    {{- end }}
