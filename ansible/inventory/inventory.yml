@@ -3,7 +3,7 @@ docker_hosts:
   hosts:
     h0:
       ansible_host: h0.elver-chicken.ts.net
-      ts_ip: "100.78.241.32"
+      ts_ip: "100.111.128.66"
       provider: homelab
       role: nas
       workload: docker
