@@ -1,0 +1,11 @@
+apiVersion: v2
+name: monitoring
+description: Monitorización de K3s con Prometheus y Grafana
+type: application
+
+version: 0.1.0
+
+dependencies:
+  - name: kube-prometheus-stack
+    version: 87.19.0
+    repository: https://prometheus-community.github.io/helm-charts

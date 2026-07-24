@@ -1,0 +1,172 @@
+kube-prometheus-stack:
+  crds:
+    enabled: true
+
+  # Algunos componentes internos de K3s no exponen sus métricas
+  # como lo haría un clúster Kubernetes tradicional.
+  kubeEtcd:
+    enabled: false
+
+  kubeControllerManager:
+    enabled: false
+
+  kubeScheduler:
+    enabled: false
+
+  kubeProxy:
+    enabled: false
+
+  defaultRules:
+    rules:
+      etcd: false
+      kubeControllerManager: false
+      kubeProxy: false
+      kubeSchedulerAlerting: false
+      kubeSchedulerRecording: false
+
+  grafana:
+    enabled: true
+
+    admin:
+      existingSecret: grafana-admin
+      userKey: admin-user
+      passwordKey: admin-password
+
+    testFramework:
+      enabled: false
+
+    nodeSelector:
+      isma.dev/stable: "true"
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 768Mi
+
+    persistence:
+      enabled: true
+      type: pvc
+      storageClassName: local-path
+      accessModes:
+        - ReadWriteOnce
+      size: 5Gi
+
+    grafana.ini:
+      users:
+        allow_sign_up: false
+
+      auth.anonymous:
+        enabled: false
+
+      security:
+        cookie_secure: true
+        cookie_samesite: lax
+
+    sidecar:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+
+  prometheus:
+    enabled: true
+
+    prometheusSpec:
+      replicas: 1
+
+      retention: 7d
+      retentionSize: 8GB
+
+      scrapeInterval: 30s
+      evaluationInterval: 30s
+
+      walCompression: true
+
+      nodeSelector:
+        isma.dev/stable: "true"
+
+      resources:
+        requests:
+          cpu: 200m
+          memory: 768Mi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 10Gi
+
+  alertmanager:
+    enabled: true
+
+    alertmanagerSpec:
+      replicas: 1
+
+      nodeSelector:
+        isma.dev/stable: "true"
+
+      resources:
+        requests:
+          cpu: 25m
+          memory: 96Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+
+      storage:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+
+  prometheusOperator:
+    nodeSelector:
+      isma.dev/stable: "true"
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  kube-state-metrics:
+    nodeSelector:
+      isma.dev/stable: "true"
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # Este DaemonSet se ejecutará en todos los nodos para recoger
+  # sus métricas de CPU, RAM, disco y red.
+  prometheus-node-exporter:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 96Mi

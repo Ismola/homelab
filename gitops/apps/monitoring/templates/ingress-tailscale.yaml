@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-tailnet
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    tailscale.com/proxy-class: stable-proxies
+spec:
+  ingressClassName: tailscale
+
+  defaultBackend:
+    service:
+      name: "{{ .Release.Name }}-grafana"
+      port:
+        number: 80
+
+  tls:
+    - hosts:
+        - grafana
