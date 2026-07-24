@@ -1,0 +1,3989 @@
+# ### Mantenimiento rolling de K3s
+
+# El playbook ansible/maintenance/update-upgrade.yml unifica la actualización de paquetes y el salto de versión del sistema operativo. Su alcance son todos los nodos K3s, incluida rpi; h0 queda fuera.
+
+# El orden efectivo es v6, v5, v4, v2, v1, rpi, v7 y v3. Ansible conserva el estado de la ejecución en su localhost implícito y elige para cada nodo un servidor K3s sano distinto del objetivo. Al mantener rpi, usa v7 o v3 para operar el clúster.
+
+# Antes del primer nodo valida el quorum y el membership de etcd, comprueba que el clúster está sano, adquiere un lock global y crea un snapshot. Después, de uno en uno, hace cordon, drain, actualización completa, un único salto soportado de OS cuando procede, reboot, validaciones de K3s/etcd/workloads y uncordon. Los tiempos de espera, la swap temporal y los marcadores persistentes están pensados para máquinas pequeñas y para poder reanudar una ejecución interrumpida de forma conservadora.
+
+# En rpi se detecta automáticamente si el sistema es Debian puro o Raspberry Pi OS. Debian puede avanzar una release; Raspberry Pi OS recibe el full-upgrade completo de su release, incluido kernel y firmware, pero no se intenta un salto mayor in-place: Raspberry Pi recomienda reinstalar una imagen nueva para ese cambio.
+
+# bash<span data-diff-end="11"></span> <span data-diff-start="12"></span>cd ansible<span data-diff-end="12"></span> <span data-diff-start="13"></span>ansible-playbook maintenance/update-upgrade.yml<span data-diff-end="13"></span> <span data-diff-start="14"></span>
+
+# Debe ejecutarse sin --limit. Antes conviene disponer de una copia verificable del almacenamiento de rpi y de snapshots de las VPS. maintenance_force_unlock=true solo debe usarse después de comprobar que no hay otra ejecución activa; sirve para recuperar un lock huérfano. Una máquina que esté más de una release soportada por detrás necesitará varias ejecuciones completas.
+
+---
+- name: Adquirir el lock y descubrir mantenimientos interrumpidos
+  hosts: localhost
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+
+  vars:
+    k3s_binary: /usr/local/bin/k3s
+    k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    maintenance_annotation: isma.dev/ansible-os-maintenance
+    maintenance_annotation_value: rolling-update
+    maintenance_force_unlock: false
+    maintenance_lock_name: ansible-os-maintenance-lock
+    maintenance_lock_namespace: kube-system
+    etcd_health_url: https://127.0.0.1:2379/health
+    etcd_alarm_url: https://127.0.0.1:2379/v3/maintenance/alarm
+    etcd_members_url: https://127.0.0.1:2379/v3/cluster/member/list
+    etcd_ca_path: /var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
+    etcd_client_cert_path: /var/lib/rancher/k3s/server/tls/etcd/client.crt
+    etcd_client_key_path: /var/lib/rancher/k3s/server/tls/etcd/client.key
+    etcd_member_name_path: /var/lib/rancher/k3s/server/db/etcd/name
+
+  tasks:
+    - name: Validar el orquestador y los controladores candidatos
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'localhost'
+          - groups['k3s_maintenance_controllers'] | length >= 2
+          - ansible_limit | default('') | length == 0
+        fail_msg: >-
+          Debe existir un único orquestador local, al menos dos controladores
+          K3s candidatos y el playbook debe ejecutarse sin --limit.
+
+    - name: Inicializar controladores Kubernetes sanos
+      ansible.builtin.set_fact:
+        maintenance_healthy_controllers: []
+
+    - name: Sondear la API local de cada controlador candidato
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - --raw=/readyz
+          - --request-timeout=30s
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_maintenance_controllers'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: maintenance_controller_probes
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+
+    - name: Recopilar controladores Kubernetes utilizables
+      ansible.builtin.set_fact:
+        maintenance_healthy_controllers: >-
+          {{ maintenance_healthy_controllers + [item.item] }}
+      loop: "{{ maintenance_controller_probes.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not item.unreachable | default(false) | bool
+        - item.rc | default(1) == 0
+
+    - name: Exigir al menos un controlador Kubernetes sano
+      ansible.builtin.assert:
+        that:
+          - maintenance_healthy_controllers | length > 0
+        fail_msg: >-
+          Ninguno de los candidatos {{ groups['k3s_maintenance_controllers'] }}
+          responde por su API local. No se puede adquirir el lock ni recuperar
+          el rolling.
+
+    - name: Elegir el controlador global de esta ejecución
+      ansible.builtin.set_fact:
+        maintenance_kubectl_host: >-
+          {{ maintenance_healthy_controllers | first }}
+
+    - name: Crear identificador global de la ejecución
+      ansible.builtin.set_fact:
+        maintenance_global_run_id: >-
+          {{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-{{ 999999 | random }}
+
+    - name: Comprobar si existe otro mantenimiento
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - configmap
+          - "{{ maintenance_lock_name }}"
+          - --namespace
+          - "{{ maintenance_lock_namespace }}"
+          - -o
+          - yaml
+          - --request-timeout=30s
+      register: existing_maintenance_lock
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
+      failed_when: existing_maintenance_lock.rc not in [0, 1]
+
+    - name: Exigir desbloqueo explícito para un lock anterior
+      ansible.builtin.assert:
+        that:
+          - maintenance_force_unlock | bool
+        fail_msg: >-
+          Ya existe {{ maintenance_lock_namespace }}/{{ maintenance_lock_name }}.
+          Puede haber otro playbook activo o una ejecución interrumpida.
+          Verifica que no haya mantenimiento en curso y vuelve a ejecutar con
+          -e maintenance_force_unlock=true solo para recuperar el lock huérfano.
+      when: existing_maintenance_lock.rc == 0
+
+    - name: Eliminar el lock huérfano confirmado
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - delete
+          - configmap
+          - "{{ maintenance_lock_name }}"
+          - --namespace
+          - "{{ maintenance_lock_namespace }}"
+          - --request-timeout=30s
+      changed_when: true
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      when: existing_maintenance_lock.rc == 0
+
+    - name: Adquirir el lock global de forma atómica
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - create
+          - configmap
+          - "{{ maintenance_lock_name }}"
+          - --namespace
+          - "{{ maintenance_lock_namespace }}"
+          - "--from-literal=run_id={{ maintenance_global_run_id }}"
+          - "--from-literal=started_by={{ ansible_user_id | default('ansible') }}"
+          - --request-timeout=30s
+      changed_when: true
+      delegate_to: "{{ maintenance_kubectl_host }}"
+
+    - name: Registrar que el lock pertenece a esta ejecución
+      ansible.builtin.set_fact:
+        maintenance_lock_acquired: true
+        maintenance_rollout_complete: false
+
+    - name: Leer todos los nodos para detectar cordons previos
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - nodes
+          - -o
+          - json
+          - --request-timeout=30s
+      register: maintenance_nodes_query
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
+
+    - name: Inicializar listas de cordons
+      ansible.builtin.set_fact:
+        maintenance_unschedulable_nodes: []
+        maintenance_owned_nodes: []
+
+    - name: Recopilar nodos no planificables
+      ansible.builtin.set_fact:
+        maintenance_unschedulable_nodes: >-
+          {{ maintenance_unschedulable_nodes + [item.metadata.name] }}
+      loop: "{{ (maintenance_nodes_query.stdout | from_json).items }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      when: item.spec.unschedulable | default(false) | bool
+
+    - name: Recopilar nodos anotados por este playbook
+      ansible.builtin.set_fact:
+        maintenance_owned_nodes: >-
+          {{ maintenance_owned_nodes + [item.metadata.name] }}
+      loop: "{{ (maintenance_nodes_query.stdout | from_json).items }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      when: >-
+        (item.metadata.annotations | default({})).get(
+          maintenance_annotation,
+          ''
+        ) == maintenance_annotation_value
+
+    - name: Calcular candidatos de reanudación conservadores
+      ansible.builtin.set_fact:
+        maintenance_resume_candidates: >-
+          {{
+            maintenance_owned_nodes
+            | union(maintenance_unschedulable_nodes)
+          }}
+
+    - name: Validar que no hay mantenimientos ajenos o múltiples
+      ansible.builtin.assert:
+        that:
+          - maintenance_unschedulable_nodes | length <= 1
+          - maintenance_owned_nodes | length <= 1
+          - maintenance_resume_candidates | length <= 1
+          - >-
+            maintenance_unschedulable_nodes
+            | difference(maintenance_owned_nodes)
+            | length == 0
+        fail_msg: >-
+          No es seguro continuar. Nodos cordonados:
+          {{ maintenance_unschedulable_nodes }}. Nodos propiedad de este
+          playbook: {{ maintenance_owned_nodes }}. Resuelve cualquier cordon
+          manual, marca incoherente o mantenimiento múltiple antes de ejecutar.
+
+    - name: Definir el nodo que debe reanudarse primero
+      ansible.builtin.set_fact:
+        maintenance_resume_node: >-
+          {{ maintenance_resume_candidates | first | default('') }}
+
+    - name: Exigir que el nodo de reanudación esté dentro del alcance
+      ansible.builtin.assert:
+        that:
+          - >-
+            maintenance_resume_node | length == 0
+            or maintenance_resume_node in groups['k3s_maintenance_targets']
+        fail_msg: >-
+          El nodo pendiente {{ maintenance_resume_node }} no pertenece a
+          k3s_maintenance_targets. Corrige el inventario o recupera manualmente
+          el nodo antes
+          de continuar.
+
+    - name: Calcular controladores alternativos para la reanudación
+      ansible.builtin.set_fact:
+        recovery_guard_controller_candidates: >-
+          {{
+            groups['k3s_maintenance_controllers']
+            | reject('equalto', maintenance_resume_node)
+            | list
+          }}
+        recovery_guard_healthy_controllers: []
+      when: maintenance_resume_node | length > 0
+
+    - name: Sondear controladores alternativos antes de la reanudación
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - --raw=/readyz
+          - --request-timeout=30s
+      delegate_to: "{{ item }}"
+      loop: "{{ recovery_guard_controller_candidates | default([]) }}"
+      loop_control:
+        label: "{{ item }}"
+      register: recovery_guard_controller_probes
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+      when: maintenance_resume_node | length > 0
+
+    - name: Recopilar controladores sanos para la reanudación
+      ansible.builtin.set_fact:
+        recovery_guard_healthy_controllers: >-
+          {{ recovery_guard_healthy_controllers + [item.item] }}
+      loop: "{{ recovery_guard_controller_probes.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - maintenance_resume_node | length > 0
+        - not item.unreachable | default(false) | bool
+        - item.rc | default(1) == 0
+
+    - name: Exigir un controlador distinto del nodo pendiente
+      ansible.builtin.assert:
+        that:
+          - recovery_guard_healthy_controllers | length > 0
+        fail_msg: >-
+          Ningún controlador distinto de {{ maintenance_resume_node }} está
+          sano; no se intentará su recuperación.
+      when: maintenance_resume_node | length > 0
+
+    - name: Elegir controlador para vigilar la reanudación
+      ansible.builtin.set_fact:
+        maintenance_kubectl_host: >-
+          {{ recovery_guard_healthy_controllers | first }}
+      when: maintenance_resume_node | length > 0
+
+    - name: Calcular miembros etcd que deben sostener la recuperación
+      ansible.builtin.set_fact:
+        recovery_etcd_guard_hosts: >-
+          {{
+            groups['server']
+            | reject('equalto', maintenance_resume_node)
+            | list
+          }}
+      when: maintenance_resume_node | length > 0
+
+    - name: Comprobar los miembros etcd que sostendrán la recuperación
+      ansible.builtin.uri:
+        url: "{{ etcd_health_url }}"
+        method: GET
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      delegate_to: "{{ item }}"
+      loop: "{{ recovery_etcd_guard_hosts | default([]) }}"
+      register: recovery_guard_etcd_health
+      when: maintenance_resume_node | length > 0
+
+    - name: Exigir quorum sano antes de recuperar un nodo
+      ansible.builtin.assert:
+        that:
+          - item.json.health | string | lower == 'true'
+        fail_msg: >-
+          El miembro etcd de {{ item.item }} no puede sostener la recuperación:
+          {{ item.content | default(item.msg | default('sin respuesta')) }}.
+      loop: "{{ recovery_guard_etcd_health.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: maintenance_resume_node | length > 0
+
+    - name: Leer nombres persistentes etcd antes de la recuperación
+      ansible.builtin.slurp:
+        src: "{{ etcd_member_name_path }}"
+      delegate_to: "{{ item }}"
+      loop: "{{ recovery_etcd_guard_hosts | default([]) }}"
+      register: recovery_expected_etcd_member_files
+      when: maintenance_resume_node | length > 0
+
+    - name: Construir los nombres de miembros etcd esperados
+      ansible.builtin.set_fact:
+        recovery_expected_etcd_member_names: >-
+          {{
+            recovery_expected_etcd_member_names | default([])
+            + [item.content | b64decode | trim]
+          }}
+      loop: "{{ recovery_expected_etcd_member_files.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: maintenance_resume_node | length > 0
+
+    - name: Consultar membership etcd antes de la recuperación
+      ansible.builtin.uri:
+        url: "{{ etcd_members_url }}"
+        method: POST
+        body_format: json
+        body:
+          linearizable: true
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      register: recovery_guard_etcd_members
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      when: maintenance_resume_node | length > 0
+
+    - name: Validar voters etcd antes de recuperar el nodo
+      ansible.builtin.assert:
+        that:
+          - recovery_guard_etcd_members.json is mapping
+          - >-
+            (
+              recovery_guard_etcd_members.json.members
+              | default([])
+              | length
+            ) == (groups['server'] | length)
+          - >-
+            (
+              recovery_guard_etcd_members.json.members
+              | default([])
+              | map(attribute='name')
+              | list
+              | reject('equalto', '')
+              | unique
+              | length
+            ) == (groups['server'] | length)
+          - >-
+            recovery_expected_etcd_member_names
+            | difference(
+                recovery_guard_etcd_members.json.members
+                | default([])
+                | map(attribute='name')
+                | list
+              )
+            | length == 0
+          - >-
+            recovery_guard_etcd_members.json.members
+            | default([])
+            | selectattr('isLearner', 'defined')
+            | selectattr('isLearner')
+            | list
+            | length == 0
+          - >-
+            recovery_guard_etcd_members.json.members
+            | default([])
+            | selectattr('clientURLs', 'undefined')
+            | list
+            | length == 0
+          - >-
+            recovery_guard_etcd_members.json.members
+            | default([])
+            | selectattr('clientURLs', 'defined')
+            | selectattr('clientURLs', 'equalto', [])
+            | list
+            | length == 0
+        fail_msg: >-
+          El membership etcd no es seguro para recuperar
+          {{ maintenance_resume_node }}:
+          {{ recovery_guard_etcd_members.json.members | default([]) }}.
+          Debe conservar todos sus voters y, como mínimo, los miembros sanos
+          {{ recovery_expected_etcd_member_names }}.
+      when: maintenance_resume_node | length > 0
+
+    - name: Consultar alarmas etcd antes de la recuperación
+      ansible.builtin.uri:
+        url: "{{ etcd_alarm_url }}"
+        method: POST
+        body_format: json
+        body: {}
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      register: recovery_guard_etcd_alarms
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      when: maintenance_resume_node | length > 0
+
+    - name: Impedir la recuperación con alarmas etcd activas
+      ansible.builtin.assert:
+        that:
+          - recovery_guard_etcd_alarms.json is mapping
+          - >-
+            recovery_guard_etcd_alarms.json.alarms
+            | default([])
+            | length == 0
+        fail_msg: >-
+          etcd tiene alarmas activas:
+          {{ recovery_guard_etcd_alarms.json.alarms | default([]) }}.
+      when: maintenance_resume_node | length > 0
+
+- name: Recuperar el servicio de un nodo interrumpido
+  hosts: k3s_maintenance_targets
+  become: true
+  gather_facts: false
+  serial: 1
+  order: reverse_inventory
+  any_errors_fatal: true
+
+  environment:
+    APT_LISTCHANGES_FRONTEND: none
+    DEBIAN_FRONTEND: noninteractive
+    NEEDRESTART_MODE: l
+    UCF_FORCE_CONFFOLD: "1"
+
+  vars:
+    k3s_binary: /usr/local/bin/k3s
+    k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    k3s_node_name: "{{ inventory_hostname }}"
+    maintenance_state_host: localhost
+    maintenance_controller_candidates: >-
+      {{
+        groups['k3s_maintenance_controllers']
+        | reject('equalto', inventory_hostname)
+        | list
+      }}
+    maintenance_swap_path: /ansible-os-maintenance.swap
+    maintenance_state_dir: /var/lib/ansible-os-maintenance
+    recovery_reboot_timeout_seconds: 3600
+    recovery_package_timeout_seconds: 3600
+    etcd_health_url: https://127.0.0.1:2379/health
+    etcd_ca_path: /var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
+    etcd_client_cert_path: /var/lib/rancher/k3s/server/tls/etcd/client.crt
+    etcd_client_key_path: /var/lib/rancher/k3s/server/tls/etcd/client.key
+    apt_timers:
+      - apt-daily.timer
+      - apt-daily-upgrade.timer
+    apt_automatic_services:
+      - apt-daily.service
+      - apt-daily-upgrade.service
+    apt_lock_files:
+      - /var/lib/dpkg/lock-frontend
+      - /var/lib/dpkg/lock
+      - /var/lib/apt/lists/lock
+      - /var/cache/apt/archives/lock
+
+  tasks:
+    - name: Exigir que el controlador haya adquirido el lock
+      ansible.builtin.assert:
+        that:
+          - >-
+            hostvars[maintenance_state_host].maintenance_lock_acquired
+            | default(false)
+            | bool
+          - >-
+            groups['k3s_maintenance_targets']
+            | difference(ansible_play_hosts_all)
+            | length == 0
+        fail_msg: >-
+          El play de lock no se ejecutó o --limit excluyó nodos/orquestador.
+          Ejecuta el playbook completo.
+
+    - name: Saltar nodos que no necesitan recuperación
+      ansible.builtin.meta: end_host
+      when: >-
+        inventory_hostname !=
+        hostvars[maintenance_state_host].maintenance_resume_node
+
+    - name: Inicializar controladores sanos para la recuperación
+      ansible.builtin.set_fact:
+        maintenance_node_healthy_controllers: []
+
+    - name: Sondear controladores alternativos para la recuperación
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - --raw=/readyz
+          - --request-timeout=30s
+      delegate_to: "{{ item }}"
+      loop: "{{ maintenance_controller_candidates }}"
+      loop_control:
+        label: "{{ item }}"
+      register: recovery_controller_probes
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+
+    - name: Recopilar controladores alternativos sanos
+      ansible.builtin.set_fact:
+        maintenance_node_healthy_controllers: >-
+          {{ maintenance_node_healthy_controllers + [item.item] }}
+      loop: "{{ recovery_controller_probes.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not item.unreachable | default(false) | bool
+        - item.rc | default(1) == 0
+
+    - name: Exigir un controlador distinto del nodo recuperado
+      ansible.builtin.assert:
+        that:
+          - maintenance_node_healthy_controllers | length > 0
+        fail_msg: >-
+          Ningún controlador alternativo de
+          {{ maintenance_controller_candidates }} está sano. No se tocará
+          {{ inventory_hostname }}.
+
+    - name: Elegir controlador para recuperar el nodo
+      ansible.builtin.set_fact:
+        maintenance_kubectl_host: >-
+          {{ maintenance_node_healthy_controllers | first }}
+
+    - name: Definir el servicio K3s del nodo interrumpido
+      ansible.builtin.set_fact:
+        recovery_k3s_service: >-
+          {{ 'k3s' if inventory_hostname in groups['server'] else 'k3s-agent' }}
+
+    - name: Asegurar el cordon antes de recuperar el nodo
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - cordon
+          - "{{ k3s_node_name }}"
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      register: recovery_cordon
+      changed_when: "'already cordoned' not in recovery_cordon.stdout"
+
+    - name: Asegurar la marca de propiedad durante la recuperación
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - annotate
+          - node
+          - "{{ k3s_node_name }}"
+          - "{{ maintenance_annotation }}={{ maintenance_annotation_value }}"
+          - --overwrite
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      vars:
+        maintenance_annotation: isma.dev/ansible-os-maintenance
+        maintenance_annotation_value: rolling-update
+      register: recovery_annotation
+      changed_when: "'annotated' in recovery_annotation.stdout"
+
+    - name: Esperar una conexión estable con el nodo interrumpido
+      ansible.builtin.wait_for_connection:
+        connect_timeout: 30
+        sleep: 10
+        timeout: "{{ recovery_reboot_timeout_seconds }}"
+
+    - name: Consultar timers APT habilitados antes de recuperarlos
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - "{{ item }}"
+      loop: "{{ apt_timers }}"
+      register: recovery_timers_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: Consultar timers APT activos antes de recuperarlos
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop: "{{ apt_timers }}"
+      register: recovery_timers_active
+      changed_when: false
+      failed_when: false
+
+    - name: Asegurar el directorio de estado durante la recuperación
+      ansible.builtin.file:
+        path: "{{ maintenance_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Preservar qué timers deben restaurarse
+      ansible.builtin.file:
+        path: "{{ maintenance_state_dir }}/{{ item.item }}.restore"
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ recovery_timers_enabled.results }}"
+      loop_control:
+        index_var: recovery_timer_index
+        label: "{{ item.item }}"
+      when:
+        - >-
+          item.rc == 0
+          or recovery_timers_active.results[recovery_timer_index].rc == 0
+
+    - name: Impedir nuevos trabajos automáticos de APT durante la recuperación
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop: "{{ apt_timers }}"
+      failed_when: false
+
+    - name: Buscar gestores de paquetes todavía activos
+      ansible.builtin.command:
+        argv:
+          - pgrep
+          - -af
+          - >-
+            (^|/)(apt|apt-get|apt.systemd.daily|dpkg|do-release-upgrade|unattended-upgrade)( |$)
+      register: recovery_package_processes
+      changed_when: false
+      failed_when: recovery_package_processes.rc not in [0, 1]
+
+    - name: No interferir con una actualización que todavía continúa
+      ansible.builtin.assert:
+        that:
+          - recovery_package_processes.rc == 1
+        fail_msg: >-
+          {{ inventory_hostname }} todavía tiene procesos de paquetes activos:
+          {{ recovery_package_processes.stdout_lines }}. Espera a que terminen
+          y vuelve a ejecutar; no se iniciará una segunda actualización.
+
+    - name: Detener servicios automáticos APT ya inactivos
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop: "{{ apt_automatic_services }}"
+      failed_when: false
+
+    - name: Esperar de forma acotada a que se liberen los locks APT y dpkg
+      ansible.builtin.command:
+        argv: "{{ ['fuser'] + apt_lock_files }}"
+      register: recovery_package_locks
+      changed_when: false
+      failed_when: recovery_package_locks.rc not in [0, 1]
+      retries: 60
+      delay: 10
+      until: recovery_package_locks.rc == 1
+
+    - name: Revalidar etcd justo antes de detener un server en recuperación
+      ansible.builtin.uri:
+        url: "{{ etcd_health_url }}"
+        method: GET
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      delegate_to: "{{ item }}"
+      loop: >-
+        {{
+          groups['server']
+          | reject('equalto', inventory_hostname)
+          | list
+        }}
+      register: recovery_etcd_health_immediately_before_stop
+      when: inventory_hostname in groups['server']
+
+    - name: Exigir que los demás voters sostengan la parada de recuperación
+      ansible.builtin.assert:
+        that:
+          - item.json.health | string | lower == 'true'
+        fail_msg: >-
+          No se detendrá K3s en {{ inventory_hostname }}: el voter
+          {{ item.item }} ya no confirma quorum.
+      loop: >-
+        {{
+          recovery_etcd_health_immediately_before_stop.results
+          | default([])
+        }}
+      loop_control:
+        label: "{{ item.item }}"
+      when: inventory_hostname in groups['server']
+
+    - name: Detener K3s mientras se repara el gestor de paquetes
+      ansible.builtin.systemd:
+        name: "{{ recovery_k3s_service }}"
+        state: stopped
+
+    - name: Completar configuraciones dpkg interrumpidas
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - --signal=TERM
+          - --kill-after=60s
+          - "{{ recovery_package_timeout_seconds }}"
+          - dpkg
+          - --force-confdef
+          - --force-confold
+          - --configure
+          - -a
+      register: recovery_dpkg_configure
+      changed_when: recovery_dpkg_configure.stdout | length > 0
+      failed_when: false
+
+    - name: Reparar dependencias APT interrumpidas
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - --signal=TERM
+          - --kill-after=60s
+          - "{{ recovery_package_timeout_seconds }}"
+          - apt-get
+          - -y
+          - -o
+          - "DPkg::Lock::Timeout={{ recovery_package_timeout_seconds }}"
+          - -o
+          - Dpkg::Options::=--force-confdef
+          - -o
+          - Dpkg::Options::=--force-confold
+          - --fix-broken
+          - install
+      register: recovery_apt_repair
+      changed_when: >-
+        '0 upgraded, 0 newly installed, 0 to remove' not in
+        recovery_apt_repair.stdout
+
+    - name: Completar dpkg después de reparar dependencias
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - --signal=TERM
+          - --kill-after=60s
+          - "{{ recovery_package_timeout_seconds }}"
+          - dpkg
+          - --force-confdef
+          - --force-confold
+          - --configure
+          - -a
+      register: recovery_final_dpkg_configure
+      changed_when: recovery_final_dpkg_configure.stdout | length > 0
+
+    - name: Auditar dpkg tras recuperar la actualización
+      ansible.builtin.command:
+        argv:
+          - dpkg
+          - --audit
+      register: recovery_dpkg_audit
+      changed_when: false
+
+    - name: Exigir un estado dpkg consistente antes de recuperar K3s
+      ansible.builtin.assert:
+        that:
+          - recovery_dpkg_audit.stdout | trim | length == 0
+        fail_msg: >-
+          dpkg sigue inconsistente en {{ inventory_hostname }}. K3s permanece
+          detenido, la swap permanece disponible y el nodo sigue cordonado.
+
+    - name: Consultar swaps durante la recuperación
+      ansible.builtin.command:
+        argv:
+          - swapon
+          - --show=NAME
+          - --noheadings
+      register: recovery_active_swaps
+      changed_when: false
+
+    - name: Intentar desactivar con límite la swap temporal huérfana
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - --signal=TERM
+          - --kill-after=60s
+          - "600"
+          - swapoff
+          - "{{ maintenance_swap_path }}"
+      register: recovery_swapoff
+      when: maintenance_swap_path in recovery_active_swaps.stdout
+      changed_when: recovery_swapoff.rc == 0
+      failed_when: false
+
+    - name: Reiniciar si la presión de memoria impide retirar la swap
+      ansible.builtin.reboot:
+        msg: "Reinicio de recuperación para retirar swap temporal"
+        reboot_timeout: "{{ recovery_reboot_timeout_seconds }}"
+        connect_timeout: 30
+        post_reboot_delay: 30
+        test_command: whoami
+      when:
+        - maintenance_swap_path in recovery_active_swaps.stdout
+        - recovery_swapoff.rc | default(1) != 0
+
+    - name: Reiniciar la conexión tras el reboot de recuperación
+      ansible.builtin.meta: reset_connection
+
+    - name: Verificar que la swap temporal ya no está activa
+      ansible.builtin.command:
+        argv:
+          - swapon
+          - --show=NAME
+          - --noheadings
+      register: recovery_swaps_after_cleanup
+      changed_when: false
+
+    - name: Exigir que el reboot o swapoff haya retirado la swap temporal
+      ansible.builtin.assert:
+        that:
+          - maintenance_swap_path not in recovery_swaps_after_cleanup.stdout
+        fail_msg: >-
+          La swap temporal continúa activa. No se eliminará ni se arrancará
+          K3s para evitar un nodo NotReady.
+
+    - name: Eliminar la swap temporal huérfana
+      ansible.builtin.file:
+        path: "{{ maintenance_swap_path }}"
+        state: absent
+
+    - name: Arrancar K3s en el nodo interrumpido
+      ansible.builtin.systemd:
+        name: "{{ recovery_k3s_service }}"
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Esperar a que el nodo interrumpido vuelva a Ready
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - wait
+          - --for=condition=Ready
+          - "node/{{ k3s_node_name }}"
+          - --timeout=15m
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
+
+- name: Validar el clúster y crear snapshot antes del mantenimiento
+  hosts: localhost
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+
+  vars:
+    create_etcd_snapshot: true
+    k3s_binary: /usr/local/bin/k3s
+    k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    snapshot_timeout_seconds: 1800
+    etcd_health_url: https://127.0.0.1:2379/health
+    etcd_alarm_url: https://127.0.0.1:2379/v3/maintenance/alarm
+    etcd_members_url: https://127.0.0.1:2379/v3/cluster/member/list
+    etcd_ca_path: /var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
+    etcd_client_cert_path: /var/lib/rancher/k3s/server/tls/etcd/client.crt
+    etcd_client_key_path: /var/lib/rancher/k3s/server/tls/etcd/client.key
+    etcd_member_name_path: /var/lib/rancher/k3s/server/db/etcd/name
+
+  tasks:
+    - name: Exigir el lock de esta ejecución
+      ansible.builtin.assert:
+        that:
+          - maintenance_lock_acquired | default(false) | bool
+
+    - name: Reinicializar controladores sanos antes del snapshot
+      ansible.builtin.set_fact:
+        maintenance_healthy_controllers: []
+
+    - name: Sondear controladores antes del snapshot
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - --raw=/readyz
+          - --request-timeout=30s
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_maintenance_controllers'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: snapshot_controller_probes
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+
+    - name: Recopilar controladores sanos antes del snapshot
+      ansible.builtin.set_fact:
+        maintenance_healthy_controllers: >-
+          {{ maintenance_healthy_controllers + [item.item] }}
+      loop: "{{ snapshot_controller_probes.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not item.unreachable | default(false) | bool
+        - item.rc | default(1) == 0
+
+    - name: Exigir un controlador sano para el preflight
+      ansible.builtin.assert:
+        that:
+          - maintenance_healthy_controllers | length > 0
+
+    - name: Elegir controlador para el snapshot y el preflight
+      ansible.builtin.set_fact:
+        maintenance_kubectl_host: >-
+          {{ maintenance_healthy_controllers | first }}
+
+    - name: Comprobar la salud local de cada miembro etcd
+      ansible.builtin.uri:
+        url: "{{ etcd_health_url }}"
+        method: GET
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'] }}"
+      register: initial_etcd_health
+
+    - name: Exigir que cada miembro etcd pueda confirmar quorum
+      ansible.builtin.assert:
+        that:
+          - item.json.health | string | lower == 'true'
+        fail_msg: >-
+          El miembro etcd de {{ item.item }} no está sano:
+          {{ item.content | default(item.msg | default('sin respuesta')) }}.
+      loop: "{{ initial_etcd_health.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Consultar alarmas globales de etcd
+      ansible.builtin.uri:
+        url: "{{ etcd_alarm_url }}"
+        method: POST
+        body_format: json
+        body: {}
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      register: initial_etcd_alarms
+      delegate_to: "{{ maintenance_kubectl_host }}"
+
+    - name: Leer los nombres persistentes de los miembros etcd
+      ansible.builtin.slurp:
+        src: "{{ etcd_member_name_path }}"
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'] }}"
+      register: initial_expected_etcd_member_files
+
+    - name: Construir los nombres etcd esperados
+      ansible.builtin.set_fact:
+        initial_expected_etcd_member_names: >-
+          {{
+            initial_expected_etcd_member_names | default([])
+            + [item.content | b64decode | trim]
+          }}
+      loop: "{{ initial_expected_etcd_member_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Consultar el membership real de etcd
+      ansible.builtin.uri:
+        url: "{{ etcd_members_url }}"
+        method: POST
+        body_format: json
+        body:
+          linearizable: true
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      register: initial_etcd_members
+      delegate_to: "{{ maintenance_kubectl_host }}"
+
+    - name: Exigir exactamente los voters etcd esperados
+      ansible.builtin.assert:
+        that:
+          - initial_etcd_members.json is mapping
+          - >-
+            (
+              initial_etcd_members.json.members
+              | default([])
+              | length
+            ) == (groups['server'] | length)
+          - >-
+            (
+              initial_etcd_members.json.members
+              | default([])
+              | map(attribute='name')
+              | sort
+              | list
+            ) == (initial_expected_etcd_member_names | sort)
+          - >-
+            initial_etcd_members.json.members
+            | default([])
+            | selectattr('isLearner', 'defined')
+            | selectattr('isLearner')
+            | list
+            | length == 0
+          - >-
+            initial_etcd_members.json.members
+            | default([])
+            | selectattr('clientURLs', 'undefined')
+            | list
+            | length == 0
+          - >-
+            initial_etcd_members.json.members
+            | default([])
+            | selectattr('clientURLs', 'defined')
+            | selectattr('clientURLs', 'equalto', [])
+            | list
+            | length == 0
+        fail_msg: >-
+          El membership etcd no coincide exactamente con
+          {{ initial_expected_etcd_member_names }} o contiene miembros sin
+          iniciar/learners:
+          {{ initial_etcd_members.json.members | default([]) }}.
+
+    - name: Impedir el mantenimiento con alarmas etcd activas
+      ansible.builtin.assert:
+        that:
+          - initial_etcd_alarms.json is mapping
+          - initial_etcd_alarms.json.alarms | default([]) | length == 0
+        fail_msg: >-
+          etcd tiene alarmas activas:
+          {{ initial_etcd_alarms.json.alarms | default([]) }}.
+
+    - name: Comprobar que todos los nodos están Ready antes de empezar
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - wait
+          - --for=condition=Ready
+          - nodes
+          - --all
+          - --timeout=120s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
+
+    - name: Comprobar que existe el token de restauración K3s
+      ansible.builtin.stat:
+        path: /var/lib/rancher/k3s/server/token
+      register: k3s_server_token
+      delegate_to: "{{ maintenance_kubectl_host }}"
+
+    - name: Exigir que el token de restauración esté presente
+      ansible.builtin.assert:
+        that:
+          - k3s_server_token.stat.exists
+          - k3s_server_token.stat.size | int > 0
+        fail_msg: >-
+          Falta el token del servidor K3s en el controlador de mantenimiento.
+
+    - name: Crear snapshot de etcd antes del primer nodo
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - etcd-snapshot
+          - save
+          - --name
+          - "pre-os-maintenance-{{ maintenance_global_run_id }}"
+      async: "{{ snapshot_timeout_seconds }}"
+      poll: 15
+      register: etcd_snapshot
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: true
+      when: create_etcd_snapshot | bool
+
+    - name: Mostrar snapshot creado
+      ansible.builtin.debug:
+        msg: "{{ etcd_snapshot.stdout_lines | default([]) }}"
+      when: create_etcd_snapshot | bool
+
+    - name: Autorizar el mantenimiento de los nodos
+      ansible.builtin.set_fact:
+        maintenance_preflight_complete: true
+
+- name: Actualizar los nodos K3s mediante mantenimiento rolling
+  hosts: k3s_maintenance_targets
+  become: true
+  gather_facts: false
+  serial: 1
+  order: reverse_inventory
+  any_errors_fatal: true
+
+  environment:
+    APT_LISTCHANGES_FRONTEND: none
+    DEBIAN_FRONTEND: noninteractive
+    NEEDRESTART_MODE: l
+    UCF_FORCE_CONFFOLD: "1"
+
+  vars:
+    # Cada ejecución realiza como máximo un salto soportado de distribución.
+    # Vuelve a ejecutar el playbook si un Debian está más de una release atrás.
+    release_upgrade: true
+    ubuntu_release_prompt: lts
+    debian_latest_release: trixie
+    debian_release_map:
+      bullseye: bookworm
+      bookworm: trixie
+    debian_components_by_release:
+      bullseye: "main contrib non-free"
+      bookworm: "main contrib non-free non-free-firmware"
+      trixie: "main contrib non-free non-free-firmware"
+
+    k3s_binary: /usr/local/bin/k3s
+    k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    k3s_node_name: "{{ inventory_hostname }}"
+    maintenance_annotation: isma.dev/ansible-os-maintenance
+    maintenance_annotation_value: rolling-update
+    maintenance_state_host: localhost
+    maintenance_controller_candidates: >-
+      {{
+        groups['k3s_maintenance_controllers']
+        | reject('equalto', inventory_hostname)
+        | list
+      }}
+
+    drain_delete_emptydir_data: true
+    drain_timeout: 45m
+    drain_operation_timeout_seconds: 3000
+    node_ready_timeout: 30m
+    workload_ready_timeout: 20m
+    cluster_settle_seconds: 30
+
+    apt_lock_timeout_seconds: 7200
+    package_operation_timeout_seconds: 21600
+    release_operation_timeout_seconds: 43200
+    async_poll_seconds: 30
+    reboot_timeout_seconds: 3600
+    maintenance_always_reboot: true
+
+    minimum_root_free_mb: 5120
+    minimum_var_free_mb: 3072
+    minimum_boot_free_mb: 300
+    minimum_root_free_inodes: 50000
+    low_memory_threshold_mb: 2048
+    minimum_swap_mb: 1024
+    maintenance_swap_size_mb: 2048
+    maintenance_swap_path: /ansible-os-maintenance.swap
+    ubuntu_phased_updates_config: >-
+      /etc/apt/apt.conf.d/99-ansible-maintenance-phased-updates
+    maintenance_state_dir: /var/lib/ansible-os-maintenance
+    etcd_health_url: https://127.0.0.1:2379/health
+    etcd_alarm_url: https://127.0.0.1:2379/v3/maintenance/alarm
+    etcd_members_url: https://127.0.0.1:2379/v3/cluster/member/list
+    etcd_ca_path: /var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
+    etcd_client_cert_path: /var/lib/rancher/k3s/server/tls/etcd/client.crt
+    etcd_client_key_path: /var/lib/rancher/k3s/server/tls/etcd/client.key
+    etcd_member_name_path: /var/lib/rancher/k3s/server/db/etcd/name
+
+    apt_timers:
+      - apt-daily.timer
+      - apt-daily-upgrade.timer
+    apt_automatic_services:
+      - apt-daily.service
+      - apt-daily-upgrade.service
+    apt_lock_files:
+      - /var/lib/dpkg/lock-frontend
+      - /var/lib/dpkg/lock
+      - /var/lib/apt/lists/lock
+      - /var/cache/apt/archives/lock
+
+  pre_tasks:
+    - name: Exigir que no se hayan omitido lock, recuperación y snapshot
+      ansible.builtin.assert:
+        that:
+          - >-
+            hostvars[maintenance_state_host].maintenance_lock_acquired
+            | default(false)
+            | bool
+          - >-
+            hostvars[maintenance_state_host].maintenance_preflight_complete
+            | default(false)
+            | bool
+          - >-
+            groups['k3s_maintenance_targets']
+            | difference(ansible_play_hosts_all)
+            | length == 0
+        fail_msg: >-
+          No se completaron el lock y el snapshot. Ejecuta el playbook completo
+          sin --limit.
+
+    - name: Saltar nodos anteriores al punto de reanudación
+      ansible.builtin.meta: end_host
+      when:
+        - >-
+          hostvars[maintenance_state_host].maintenance_resume_node
+          | default('')
+          | length > 0
+        - >-
+          inventory_hostname !=
+          hostvars[maintenance_state_host].maintenance_resume_node
+
+    - name: Recopilar facts solo del nodo que se va a mantener
+      ansible.builtin.setup:
+
+    - name: Detectar una instalación de Raspberry Pi OS
+      ansible.builtin.stat:
+        path: /etc/rpi-issue
+      register: raspberry_pi_os_marker
+
+    - name: Leer la identidad declarada por el sistema
+      ansible.builtin.slurp:
+        src: /etc/os-release
+      register: maintenance_os_release_file
+
+    - name: Clasificar de forma segura la distribución del nodo
+      ansible.builtin.set_fact:
+        maintenance_is_debian_distribution: >-
+          {{
+            ansible_facts['distribution'] in ['Debian', 'Raspbian']
+          }}
+        maintenance_is_raspberry_pi_os: >-
+          {{
+            ansible_facts['distribution'] == 'Raspbian'
+            or raspberry_pi_os_marker.stat.exists
+            or 'ID=raspbian' in
+              (maintenance_os_release_file.content | b64decode)
+            or 'ID="raspbian"' in
+              (maintenance_os_release_file.content | b64decode)
+          }}
+
+    - name: Decidir si se admite un salto Debian in-place
+      ansible.builtin.set_fact:
+        maintenance_debian_release_upgrade_allowed: >-
+          {{
+            release_upgrade | bool
+            and maintenance_is_debian_distribution | bool
+            and not (maintenance_is_raspberry_pi_os | bool)
+          }}
+
+    - name: Explicar el tratamiento seguro de Raspberry Pi OS
+      ansible.builtin.debug:
+        msg: >-
+          Raspberry Pi OS se actualizará por completo dentro de su release,
+          incluidos kernel y firmware empaquetados. Se omite el salto mayor
+          in-place porque el fabricante exige reinstalar una imagen nueva.
+      when:
+        - maintenance_is_raspberry_pi_os | bool
+        - release_upgrade | bool
+
+    - name: Inicializar controladores sanos para el nodo
+      ansible.builtin.set_fact:
+        maintenance_node_healthy_controllers: []
+
+    - name: Sondear controladores distintos del nodo
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - --raw=/readyz
+          - --request-timeout=30s
+      delegate_to: "{{ item }}"
+      loop: "{{ maintenance_controller_candidates }}"
+      loop_control:
+        label: "{{ item }}"
+      register: node_controller_probes
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+
+    - name: Recopilar controladores sanos para el nodo
+      ansible.builtin.set_fact:
+        maintenance_node_healthy_controllers: >-
+          {{ maintenance_node_healthy_controllers + [item.item] }}
+      loop: "{{ node_controller_probes.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not item.unreachable | default(false) | bool
+        - item.rc | default(1) == 0
+
+    - name: Exigir un controlador sano distinto del nodo
+      ansible.builtin.assert:
+        that:
+          - maintenance_node_healthy_controllers | length > 0
+        fail_msg: >-
+          Ningún controlador alternativo de
+          {{ maintenance_controller_candidates }} está sano. No se drenará
+          {{ inventory_hostname }}.
+
+    - name: Elegir controlador Kubernetes para el nodo
+      ansible.builtin.set_fact:
+        maintenance_kubectl_host: >-
+          {{ maintenance_node_healthy_controllers | first }}
+
+    - name: Validar el alcance y el sistema operativo
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname in groups['k3s_cluster']
+          - ansible_facts['distribution'] in ['Ubuntu', 'Debian', 'Raspbian']
+          - maintenance_kubectl_host != inventory_hostname
+        fail_msg: >-
+          {{ inventory_hostname }} no es un nodo K3s Debian/Ubuntu válido o el
+          controlador de mantenimiento apunta al propio nodo.
+
+    - name: Rechazar releases Debian no soportadas antes del cordon
+      ansible.builtin.assert:
+        that:
+          - >-
+            ansible_facts['distribution_release'] in
+            (
+              (debian_release_map.keys() | list)
+              + [debian_latest_release]
+            )
+        fail_msg: >-
+          Debian {{ ansible_facts['distribution_release'] }} no está soportada.
+          Solo se admiten {{ debian_release_map.keys() | list }} y
+          {{ debian_latest_release }}; no se drenará el nodo.
+      when: maintenance_is_debian_distribution | bool
+
+    - name: Validar herramientas locales antes de drenar
+      ansible.builtin.command:
+        argv:
+          - /bin/sh
+          - -c
+          - command -v fuser timeout pgrep swapon swapoff mkswap
+      register: required_maintenance_tools
+      changed_when: false
+
+    - name: Definir datos del mantenimiento del nodo
+      ansible.builtin.set_fact:
+        k3s_service_name: >-
+          {{ 'k3s' if inventory_hostname in groups['server'] else 'k3s-agent' }}
+        maintenance_run_id: "{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}"
+        initial_distribution_release: "{{ ansible_facts['distribution_release'] }}"
+        initial_distribution_version: "{{ ansible_facts['distribution_version'] }}"
+        os_release_upgraded: false
+        package_maintenance_started: false
+        package_state_safe: true
+        node_uncordoned_by_playbook: false
+
+    - name: Consultar timers APT habilitados
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-enabled
+          - "{{ item }}"
+      loop: "{{ apt_timers }}"
+      register: apt_timers_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: Consultar timers APT activos
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop: "{{ apt_timers }}"
+      register: apt_timers_active
+      changed_when: false
+      failed_when: false
+
+    - name: Inicializar el estado de restauración de timers APT
+      ansible.builtin.set_fact:
+        apt_timer_restore: {}
+
+    - name: Crear el directorio de estado persistente
+      ansible.builtin.file:
+        path: "{{ maintenance_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Buscar estado persistente de timers APT
+      ansible.builtin.stat:
+        path: "{{ maintenance_state_dir }}/{{ item }}.restore"
+      loop: "{{ apt_timers }}"
+      register: apt_timer_markers
+
+    - name: Recordar qué timers APT deben restaurarse
+      ansible.builtin.set_fact:
+        apt_timer_restore: >-
+          {{
+            apt_timer_restore
+            | combine(
+                {
+                  item.item:
+                    (
+                      item.rc == 0
+                      or apt_timers_active.results[timer_index].rc == 0
+                      or apt_timer_markers.results[timer_index].stat.exists
+                    )
+                }
+              )
+          }}
+      loop: "{{ apt_timers_enabled.results }}"
+      loop_control:
+        index_var: timer_index
+        label: "{{ item.item }}"
+
+    - name: Persistir el estado de los timers APT
+      ansible.builtin.file:
+        path: "{{ maintenance_state_dir }}/{{ item }}.restore"
+        state: touch
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ apt_timers }}"
+      when: apt_timer_restore[item] | bool
+
+    - name: Comprobar la API antes de mantener el nodo
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - --raw=/readyz
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
+
+    - name: Comprobar que el clúster no está degradado
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - wait
+          - --for=condition=Ready
+          - nodes
+          - --all
+          - --timeout=60s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
+
+    - name: Comprobar cada miembro etcd antes de mantener el nodo
+      ansible.builtin.uri:
+        url: "{{ etcd_health_url }}"
+        method: GET
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'] }}"
+      register: etcd_health_before_node
+
+    - name: Exigir quorum sano en cada miembro antes del drain
+      ansible.builtin.assert:
+        that:
+          - item.json.health | string | lower == 'true'
+        fail_msg: >-
+          El miembro etcd de {{ item.item }} no puede confirmar salud/quorum:
+          {{ item.content | default(item.msg | default('sin respuesta')) }}.
+      loop: "{{ etcd_health_before_node.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Leer nombres persistentes de miembros etcd antes del drain
+      ansible.builtin.slurp:
+        src: "{{ etcd_member_name_path }}"
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'] }}"
+      register: expected_etcd_member_files
+
+    - name: Inicializar nombres etcd esperados para el nodo
+      ansible.builtin.set_fact:
+        expected_etcd_member_names: []
+
+    - name: Construir nombres etcd esperados para el nodo
+      ansible.builtin.set_fact:
+        expected_etcd_member_names: >-
+          {{
+            expected_etcd_member_names
+            + [item.content | b64decode | trim]
+          }}
+      loop: "{{ expected_etcd_member_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Consultar alarmas etcd antes del drain
+      ansible.builtin.uri:
+        url: "{{ etcd_alarm_url }}"
+        method: POST
+        body_format: json
+        body: {}
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      register: etcd_alarms_before_node
+
+    - name: Consultar membership etcd antes del drain
+      ansible.builtin.uri:
+        url: "{{ etcd_members_url }}"
+        method: POST
+        body_format: json
+        body:
+          linearizable: true
+        ca_path: "{{ etcd_ca_path }}"
+        client_cert: "{{ etcd_client_cert_path }}"
+        client_key: "{{ etcd_client_key_path }}"
+        return_content: true
+        status_code: 200
+        timeout: 30
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      register: etcd_members_before_node
+
+    - name: Exigir exactamente los voters etcd antes del drain
+      ansible.builtin.assert:
+        that:
+          - etcd_members_before_node.json is mapping
+          - >-
+            (
+              etcd_members_before_node.json.members
+              | default([])
+              | length
+            ) == (groups['server'] | length)
+          - >-
+            (
+              etcd_members_before_node.json.members
+              | default([])
+              | map(attribute='name')
+              | sort
+              | list
+            ) == (expected_etcd_member_names | sort)
+          - >-
+            etcd_members_before_node.json.members
+            | default([])
+            | selectattr('isLearner', 'defined')
+            | selectattr('isLearner')
+            | list
+            | length == 0
+          - >-
+            etcd_members_before_node.json.members
+            | default([])
+            | selectattr('clientURLs', 'undefined')
+            | list
+            | length == 0
+          - >-
+            etcd_members_before_node.json.members
+            | default([])
+            | selectattr('clientURLs', 'defined')
+            | selectattr('clientURLs', 'equalto', [])
+            | list
+            | length == 0
+        fail_msg: >-
+          El membership etcd no coincide exactamente con
+          {{ expected_etcd_member_names }} o contiene miembros sin
+          iniciar/learners:
+          {{ etcd_members_before_node.json.members | default([]) }}.
+
+    - name: Exigir que etcd no tenga alarmas antes del drain
+      ansible.builtin.assert:
+        that:
+          - etcd_alarms_before_node.json is mapping
+          - etcd_alarms_before_node.json.alarms | default([]) | length == 0
+        fail_msg: >-
+          etcd tiene alarmas activas:
+          {{ etcd_alarms_before_node.json.alarms | default([]) }}.
+
+    - name: Listar deployments antes del mantenimiento
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - deployment
+          - --all-namespaces
+          - -o
+          - json
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      register: deployments_before_maintenance
+      changed_when: false
+
+    - name: Comprobar cada deployment antes del mantenimiento
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - rollout
+          - status
+          - "deployment/{{ item.metadata.name }}"
+          - --namespace
+          - "{{ item.metadata.namespace }}"
+          - "--timeout={{ workload_ready_timeout }}"
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      loop: "{{ (deployments_before_maintenance.stdout | from_json).items }}"
+      loop_control:
+        label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
+      changed_when: false
+
+    - name: Listar StatefulSets antes del mantenimiento
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - statefulset
+          - --all-namespaces
+          - -o
+          - json
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      register: statefulsets_before_maintenance
+      changed_when: false
+
+    - name: Comprobar cada StatefulSet antes del mantenimiento
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - rollout
+          - status
+          - "statefulset/{{ item.metadata.name }}"
+          - --namespace
+          - "{{ item.metadata.namespace }}"
+          - "--timeout={{ workload_ready_timeout }}"
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      loop: "{{ (statefulsets_before_maintenance.stdout | from_json).items }}"
+      loop_control:
+        label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
+      changed_when: false
+
+    - name: Leer el estado Kubernetes del nodo
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - node
+          - "{{ k3s_node_name }}"
+          - -o
+          - json
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      register: k3s_node_query
+      changed_when: false
+
+    - name: Interpretar el estado Kubernetes del nodo
+      ansible.builtin.set_fact:
+        k3s_node_data: "{{ k3s_node_query.stdout | from_json }}"
+
+    - name: Detectar presión de recursos en el nodo
+      ansible.builtin.set_fact:
+        k3s_node_pressure: >-
+          {{
+            k3s_node_data.status.conditions
+            | selectattr(
+                'type',
+                'in',
+                ['DiskPressure', 'MemoryPressure', 'PIDPressure']
+              )
+            | selectattr('status', 'equalto', 'True')
+            | map(attribute='type')
+            | list
+          }}
+
+    - name: Exigir que el nodo no tenga presión de recursos
+      ansible.builtin.assert:
+        that:
+          - k3s_node_pressure | length == 0
+        fail_msg: >-
+          Kubernetes informa de presión en {{ inventory_hostname }}:
+          {{ k3s_node_pressure }}.
+
+    - name: Recordar el estado de planificación original
+      ansible.builtin.set_fact:
+        node_was_unschedulable: >-
+          {{ k3s_node_data.spec.unschedulable | default(false) | bool }}
+        maintenance_owned_before: >-
+          {{
+            (k3s_node_data.metadata.annotations | default({})).get(
+              maintenance_annotation,
+              ''
+            ) == maintenance_annotation_value
+          }}
+
+    - name: Decidir si Ansible debe hacer uncordon al finalizar
+      ansible.builtin.set_fact:
+        maintenance_should_uncordon: >-
+          {{ (not node_was_unschedulable) or maintenance_owned_before }}
+
+    - name: Leer todos los nodos antes del drain
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - nodes
+          - -o
+          - json
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      register: all_nodes_before_drain
+      changed_when: false
+
+    - name: Inicializar cordons observados antes del drain
+      ansible.builtin.set_fact:
+        other_unschedulable_nodes: []
+
+    - name: Recopilar cordons observados antes del drain
+      ansible.builtin.set_fact:
+        other_unschedulable_nodes: >-
+          {{ other_unschedulable_nodes + [item.metadata.name] }}
+      loop: "{{ (all_nodes_before_drain.stdout | from_json).items }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      when:
+        - item.spec.unschedulable | default(false) | bool
+        - item.metadata.name != k3s_node_name
+
+    - name: Impedir drenar mientras otro nodo está cordonado
+      ansible.builtin.assert:
+        that:
+          - other_unschedulable_nodes | length == 0
+        fail_msg: >-
+          No se drenará {{ k3s_node_name }} porque ya están cordonados:
+          {{ other_unschedulable_nodes }}.
+
+    - name: Comprobar Tailscale en el nodo
+      ansible.builtin.command:
+        argv:
+          - ip
+          - link
+          - show
+          - tailscale0
+      changed_when: false
+
+    - name: Comprobar que tailscaled está activo
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - tailscaled
+      changed_when: false
+
+    - name: Medir espacio libre en la raíz
+      ansible.builtin.command:
+        argv:
+          - df
+          - -Pm
+          - /
+      register: root_disk
+      changed_when: false
+
+    - name: Medir inodos libres en la raíz
+      ansible.builtin.command:
+        argv:
+          - df
+          - -Pi
+          - /
+      register: root_inodes
+      changed_when: false
+
+    - name: Medir espacio libre para la caché APT
+      ansible.builtin.command:
+        argv:
+          - df
+          - -Pm
+          - /var/cache/apt
+      register: var_disk
+      changed_when: false
+
+    - name: Detectar la partición boot usada por el nodo
+      ansible.builtin.stat:
+        path: /boot/firmware
+      register: boot_firmware_path
+
+    - name: Elegir la ruta boot que se debe validar
+      ansible.builtin.set_fact:
+        maintenance_boot_path: >-
+          {{
+            '/boot/firmware'
+            if boot_firmware_path.stat.isdir | default(false)
+            else '/boot'
+          }}
+
+    - name: Medir espacio libre en boot
+      ansible.builtin.command:
+        argv:
+          - df
+          - -Pm
+          - "{{ maintenance_boot_path }}"
+      register: boot_disk
+      changed_when: false
+
+    - name: Consultar paquetes retenidos antes del drain
+      ansible.builtin.command:
+        argv:
+          - apt-mark
+          - showhold
+      register: initial_held_packages
+      changed_when: false
+
+    - name: Exigir que no haya paquetes retenidos
+      ansible.builtin.assert:
+        that:
+          - initial_held_packages.stdout_lines | length == 0
+        fail_msg: >-
+          Hay paquetes retenidos en {{ inventory_hostname }}:
+          {{ initial_held_packages.stdout_lines }}. Revísalos antes del
+          mantenimiento.
+
+    - name: Simular el dist-upgrade de la release actual
+      ansible.builtin.command:
+        argv:
+          - apt-get
+          - -s
+          - -o
+          - Debug::NoLocking=true
+          - dist-upgrade
+      register: apt_upgrade_simulation
+      changed_when: false
+      environment:
+        LANG: C
+        LC_ALL: C
+
+    - name: Impedir la eliminación de acceso y red críticos
+      ansible.builtin.assert:
+        that:
+          - "'Remv openssh-server' not in apt_upgrade_simulation.stdout"
+          - "'Remv tailscale' not in apt_upgrade_simulation.stdout"
+        fail_msg: >-
+          La simulación APT intenta eliminar openssh-server o tailscale.
+          No es seguro continuar por ser el único canal de administración.
+
+    - name: Buscar swap gestionada de una ejecución anterior
+      ansible.builtin.stat:
+        path: "{{ maintenance_swap_path }}"
+      register: maintenance_swap_file
+
+    - name: Calcular recursos necesarios
+      ansible.builtin.set_fact:
+        root_free_mb: "{{ root_disk.stdout_lines[-1].split()[3] | int }}"
+        root_free_inodes: "{{ root_inodes.stdout_lines[-1].split()[3] | int }}"
+        var_free_mb: "{{ var_disk.stdout_lines[-1].split()[3] | int }}"
+        boot_free_mb: "{{ boot_disk.stdout_lines[-1].split()[3] | int }}"
+        maintenance_swap_needed: >-
+          {{
+            maintenance_swap_file.stat.exists
+            or (
+              ansible_facts['memtotal_mb'] | int < low_memory_threshold_mb | int
+              and ansible_facts['swaptotal_mb'] | int < minimum_swap_mb | int
+            )
+          }}
+
+    - name: Validar espacio, inodos y margen para swap
+      ansible.builtin.assert:
+        that:
+          - >-
+            root_free_mb | int >=
+            (
+              minimum_root_free_mb | int
+              + (
+                maintenance_swap_size_mb | int
+                if maintenance_swap_needed and not maintenance_swap_file.stat.exists
+                else 0
+              )
+            )
+          - root_free_inodes | int >= minimum_root_free_inodes | int
+          - var_free_mb | int >= minimum_var_free_mb | int
+          - boot_free_mb | int >= minimum_boot_free_mb | int
+        fail_msg: >-
+          Recursos insuficientes en {{ inventory_hostname }}. Libres:
+          root={{ root_free_mb }} MiB, var={{ var_free_mb }} MiB,
+          boot={{ boot_free_mb }} MiB en {{ maintenance_boot_path }} y
+          {{ root_free_inodes }} inodos.
+          Requeridos: root={{ minimum_root_free_mb }} MiB,
+          var={{ minimum_var_free_mb }} MiB, boot={{ minimum_boot_free_mb }} MiB,
+          {{ minimum_root_free_inodes }} inodos y, si procede,
+          {{ maintenance_swap_size_mb }} MiB adicionales para la swap temporal.
+
+    - name: Reservar swap temporal para nodos con poca memoria
+      when:
+        - maintenance_swap_needed | bool
+        - not maintenance_swap_file.stat.exists
+      block:
+        - name: Crear rápidamente el fichero de swap temporal
+          ansible.builtin.command:
+            argv:
+              - fallocate
+              - --length
+              - "{{ maintenance_swap_size_mb }}M"
+              - "{{ maintenance_swap_path }}"
+          changed_when: true
+
+      rescue:
+        - name: Crear el fichero de swap con dd si fallocate no funciona
+          ansible.builtin.command:
+            argv:
+              - dd
+              - if=/dev/zero
+              - "of={{ maintenance_swap_path }}"
+              - bs=1M
+              - "count={{ maintenance_swap_size_mb }}"
+              - status=none
+          changed_when: true
+
+    - name: Volver a medir el fichero de swap temporal
+      ansible.builtin.stat:
+        path: "{{ maintenance_swap_path }}"
+      register: maintenance_swap_prepared
+      when: maintenance_swap_needed | bool
+
+    - name: Validar el tamaño de la swap temporal
+      ansible.builtin.assert:
+        that:
+          - maintenance_swap_prepared.stat.exists
+          - >-
+            maintenance_swap_prepared.stat.size | int >=
+            (maintenance_swap_size_mb | int * 1024 * 1024)
+        fail_msg: "La swap temporal está incompleta; no se drenará el nodo."
+      when: maintenance_swap_needed | bool
+
+    - name: Proteger el fichero de swap temporal
+      ansible.builtin.file:
+        path: "{{ maintenance_swap_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: maintenance_swap_needed | bool
+
+    - name: Comprobar la firma de la swap temporal
+      ansible.builtin.command:
+        argv:
+          - blkid
+          - -p
+          - -s
+          - TYPE
+          - -o
+          - value
+          - "{{ maintenance_swap_path }}"
+      register: maintenance_swap_signature
+      changed_when: false
+      failed_when: false
+      when: maintenance_swap_needed | bool
+
+    - name: Inicializar la swap temporal
+      ansible.builtin.command:
+        argv:
+          - mkswap
+          - --force
+          - "{{ maintenance_swap_path }}"
+      changed_when: true
+      when:
+        - maintenance_swap_needed | bool
+        - maintenance_swap_signature.stdout | default('') != 'swap'
+
+  tasks:
+    - name: Mantener el nodo de forma transaccional
+      block:
+        - name: Marcar el cordon como gestionado por este playbook
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - annotate
+              - node
+              - "{{ k3s_node_name }}"
+              - "{{ maintenance_annotation }}={{ maintenance_annotation_value }}"
+              - --overwrite
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: maintenance_annotation_result
+          changed_when: "'annotated' in maintenance_annotation_result.stdout"
+          when: maintenance_should_uncordon | bool
+
+        - name: Hacer cordon del nodo
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - cordon
+              - "{{ k3s_node_name }}"
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: cordon_result
+          changed_when: "'already cordoned' not in cordon_result.stdout"
+
+        - name: Confirmar el cordon del nodo
+          ansible.builtin.set_fact:
+            node_cordon_confirmed: true
+
+        - name: Drenar el nodo respetando PodDisruptionBudgets
+          ansible.builtin.command:
+            cmd: >-
+              {{ k3s_binary }} kubectl
+              --kubeconfig {{ k3s_kubeconfig | quote }}
+              drain {{ k3s_node_name | quote }}
+              --ignore-daemonsets
+              --timeout={{ drain_timeout }}
+              {% if drain_delete_emptydir_data | bool %}--delete-emptydir-data{% endif %}
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          async: "{{ drain_operation_timeout_seconds }}"
+          poll: 15
+          register: drain_result
+          changed_when: "'drained' in drain_result.stdout"
+
+        - name: Dar tiempo al scheduler tras el drain
+          ansible.builtin.pause:
+            seconds: 10
+
+        - name: Listar deployments tras el drain
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - get
+              - deployment
+              - --all-namespaces
+              - -o
+              - json
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: deployments_after_drain
+          changed_when: false
+
+        - name: Exigir el rollout de cada deployment tras el drain
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - rollout
+              - status
+              - "deployment/{{ item.metadata.name }}"
+              - --namespace
+              - "{{ item.metadata.namespace }}"
+              - "--timeout={{ workload_ready_timeout }}"
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          loop: "{{ (deployments_after_drain.stdout | from_json).items }}"
+          loop_control:
+            label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
+          changed_when: false
+
+        - name: Listar StatefulSets tras el drain
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - get
+              - statefulset
+              - --all-namespaces
+              - -o
+              - json
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: statefulsets_after_drain
+          changed_when: false
+
+        - name: Exigir el rollout de cada StatefulSet tras el drain
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - rollout
+              - status
+              - "statefulset/{{ item.metadata.name }}"
+              - --namespace
+              - "{{ item.metadata.namespace }}"
+              - "--timeout={{ workload_ready_timeout }}"
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          loop: "{{ (statefulsets_after_drain.stdout | from_json).items }}"
+          loop_control:
+            label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
+          changed_when: false
+
+        - name: Revalidar etcd justo antes de detener un server
+          ansible.builtin.uri:
+            url: "{{ etcd_health_url }}"
+            method: GET
+            ca_path: "{{ etcd_ca_path }}"
+            client_cert: "{{ etcd_client_cert_path }}"
+            client_key: "{{ etcd_client_key_path }}"
+            return_content: true
+            status_code: 200
+            timeout: 30
+          delegate_to: "{{ item }}"
+          loop: >-
+            {{
+              groups['server']
+              | reject('equalto', inventory_hostname)
+              | list
+            }}
+          register: etcd_health_immediately_before_stop
+          when: inventory_hostname in groups['server']
+
+        - name: Exigir que los demás voters sostengan la parada
+          ansible.builtin.assert:
+            that:
+              - item.json.health | string | lower == 'true'
+            fail_msg: >-
+              No se detendrá K3s en {{ inventory_hostname }}: el voter
+              {{ item.item }} ya no confirma quorum.
+          loop: >-
+            {{
+              etcd_health_immediately_before_stop.results
+              | default([])
+            }}
+          loop_control:
+            label: "{{ item.item }}"
+          when: inventory_hostname in groups['server']
+
+        - name: Detener K3s para liberar recursos
+          ansible.builtin.systemd:
+            name: "{{ k3s_service_name }}"
+            state: stopped
+
+        - name: Parar timers automáticos de APT durante el mantenimiento
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            state: stopped
+            enabled: false
+          loop: "{{ apt_timers }}"
+          failed_when: false
+
+        - name: Esperar a que terminen gestores de paquetes previos
+          ansible.builtin.command:
+            argv:
+              - pgrep
+              - -af
+              - >-
+                (^|/)(apt|apt-get|apt.systemd.daily|dpkg|do-release-upgrade|unattended-upgrade)( |$)
+          register: initial_package_processes
+          changed_when: false
+          failed_when: initial_package_processes.rc not in [0, 1]
+          retries: 240
+          delay: 30
+          until: initial_package_processes.rc == 1
+
+        - name: Confirmar servicios automáticos de APT detenidos
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            state: stopped
+          loop: "{{ apt_automatic_services }}"
+          failed_when: false
+
+        - name: Esperar de forma acotada a los locks iniciales APT y dpkg
+          ansible.builtin.command:
+            argv: "{{ ['fuser'] + apt_lock_files }}"
+          register: initial_package_locks
+          changed_when: false
+          failed_when: initial_package_locks.rc not in [0, 1]
+          retries: 240
+          delay: 30
+          until: initial_package_locks.rc == 1
+
+        - name: Consultar swaps activas
+          ansible.builtin.command:
+            argv:
+              - swapon
+              - --show=NAME
+              - --noheadings
+          register: active_swaps
+          changed_when: false
+          when: maintenance_swap_needed | bool
+
+        - name: Activar swap temporal con K3s detenido
+          ansible.builtin.command:
+            argv:
+              - swapon
+              - "{{ maintenance_swap_path }}"
+          changed_when: true
+          when:
+            - maintenance_swap_needed | bool
+            - maintenance_swap_path not in active_swaps.stdout
+
+        - name: Buscar repositorios APT obsoletos
+          ansible.builtin.find:
+            paths:
+              - /etc/apt
+            patterns:
+              - "*.list"
+            recurse: true
+            file_type: file
+          register: apt_source_files
+
+        - name: Incluir actualizaciones phased antes del salto Ubuntu
+          ansible.builtin.copy:
+            dest: "{{ ubuntu_phased_updates_config }}"
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              APT::Get::Always-Include-Phased-Updates "true";
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Eliminar el repositorio obsoleto de Neofetch
+          ansible.builtin.lineinfile:
+            path: "{{ item.path }}"
+            regexp: '.*dl\.bintray\.com/dawidd6/neofetch.*'
+            state: absent
+            backup: true
+          loop: "{{ apt_source_files.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+        - name: Marcar el inicio de las operaciones de paquetes
+          ansible.builtin.set_fact:
+            package_maintenance_started: true
+            package_state_safe: false
+
+        - name: Finalizar configuraciones dpkg pendientes
+          ansible.builtin.command:
+            argv:
+              - dpkg
+              - --force-confdef
+              - --force-confold
+              - --configure
+              - -a
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          register: dpkg_configure
+          changed_when: dpkg_configure.stdout | length > 0
+
+        - name: Reparar dependencias rotas
+          ansible.builtin.apt:
+            state: fixed
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Actualizar la caché APT
+          ansible.builtin.apt:
+            update_cache: true
+            cache_valid_time: 0
+            update_cache_retries: 10
+            update_cache_retry_max_delay: 60
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Simular el dist-upgrade con los índices recién actualizados
+          ansible.builtin.command:
+            argv:
+              - apt-get
+              - -s
+              - -o
+              - "DPkg::Lock::Timeout={{ apt_lock_timeout_seconds }}"
+              - dist-upgrade
+          register: current_release_upgrade_simulation
+          changed_when: false
+          environment:
+            LANG: C
+            LC_ALL: C
+
+        - name: Proteger SSH y Tailscale en el upgrade de la release actual
+          ansible.builtin.assert:
+            that:
+              - >-
+                'Remv openssh-server' not in
+                current_release_upgrade_simulation.stdout
+              - >-
+                'Remv tailscale' not in
+                current_release_upgrade_simulation.stdout
+            fail_msg: >-
+              El plan APT actualizado intenta eliminar openssh-server o
+              tailscale. Se conserva el cordon y no se aplicará el dist-upgrade.
+
+        - name: Actualizar completamente la release actual
+          ansible.builtin.apt:
+            upgrade: dist
+            dpkg_options: force-confdef,force-confold
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Eliminar paquetes innecesarios antes del salto
+          ansible.builtin.apt:
+            autoremove: true
+            purge: true
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Comprobar si hace falta reiniciar antes del salto
+          ansible.builtin.stat:
+            path: /var/run/reboot-required
+          register: pre_release_reboot
+
+        - name: Reiniciar antes del salto de distribución
+          ansible.builtin.reboot:
+            msg: "Reinicio previo al OS upgrade iniciado por Ansible"
+            reboot_timeout: "{{ reboot_timeout_seconds }}"
+            connect_timeout: 30
+            post_reboot_delay: 30
+            test_command: whoami
+          when: pre_release_reboot.stat.exists
+
+        - name: Refrescar facts tras el reinicio intermedio
+          ansible.builtin.setup:
+          when: pre_release_reboot.stat.exists
+
+        - name: Revalidar etcd antes de volver a detener un server
+          ansible.builtin.uri:
+            url: "{{ etcd_health_url }}"
+            method: GET
+            ca_path: "{{ etcd_ca_path }}"
+            client_cert: "{{ etcd_client_cert_path }}"
+            client_key: "{{ etcd_client_key_path }}"
+            return_content: true
+            status_code: 200
+            timeout: 30
+          delegate_to: "{{ item }}"
+          loop: >-
+            {{
+              groups['server']
+              | reject('equalto', inventory_hostname)
+              | list
+            }}
+          register: etcd_health_before_intermediate_stop
+          when:
+            - pre_release_reboot.stat.exists
+            - inventory_hostname in groups['server']
+
+        - name: Exigir quorum antes de repetir la parada del server
+          ansible.builtin.assert:
+            that:
+              - item.json.health | string | lower == 'true'
+            fail_msg: >-
+              K3s seguirá arrancado en {{ inventory_hostname }}: el voter
+              {{ item.item }} ya no confirma quorum después del reboot.
+          loop: >-
+            {{
+              etcd_health_before_intermediate_stop.results
+              | default([])
+            }}
+          loop_control:
+            label: "{{ item.item }}"
+          when:
+            - pre_release_reboot.stat.exists
+            - inventory_hostname in groups['server']
+
+        - name: Volver a detener K3s tras el reinicio intermedio
+          ansible.builtin.systemd:
+            name: "{{ k3s_service_name }}"
+            state: stopped
+          when: pre_release_reboot.stat.exists
+
+        - name: Volver a parar timers APT tras el reinicio intermedio
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            state: stopped
+            enabled: false
+          loop: "{{ apt_timers }}"
+          failed_when: false
+          when: pre_release_reboot.stat.exists
+
+        - name: Esperar gestores de paquetes tras el reinicio intermedio
+          ansible.builtin.command:
+            argv:
+              - pgrep
+              - -af
+              - >-
+                (^|/)(apt|apt-get|apt.systemd.daily|dpkg|do-release-upgrade|unattended-upgrade)( |$)
+          register: intermediate_package_processes
+          changed_when: false
+          failed_when: intermediate_package_processes.rc not in [0, 1]
+          retries: 240
+          delay: 30
+          until: intermediate_package_processes.rc == 1
+          when: pre_release_reboot.stat.exists
+
+        - name: Confirmar servicios APT detenidos tras el reinicio
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            state: stopped
+          loop: "{{ apt_automatic_services }}"
+          failed_when: false
+          when: pre_release_reboot.stat.exists
+
+        - name: Esperar locks APT y dpkg tras el reinicio intermedio
+          ansible.builtin.command:
+            argv: "{{ ['fuser'] + apt_lock_files }}"
+          register: intermediate_package_locks
+          changed_when: false
+          failed_when: intermediate_package_locks.rc not in [0, 1]
+          retries: 240
+          delay: 30
+          until: intermediate_package_locks.rc == 1
+          when: pre_release_reboot.stat.exists
+
+        - name: Reactivar swap tras el reinicio intermedio
+          ansible.builtin.command:
+            argv:
+              - swapon
+              - "{{ maintenance_swap_path }}"
+          changed_when: true
+          when:
+            - maintenance_swap_needed | bool
+            - pre_release_reboot.stat.exists
+
+        - name: Instalar herramientas de OS upgrade en Ubuntu
+          ansible.builtin.apt:
+            name:
+              - update-manager-core
+              - ubuntu-release-upgrader-core
+            state: present
+            update_cache: true
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Configurar la política de releases de Ubuntu
+          ansible.builtin.lineinfile:
+            path: /etc/update-manager/release-upgrades
+            regexp: '^Prompt='
+            line: "Prompt={{ ubuntu_release_prompt }}"
+            create: true
+            mode: "0644"
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Buscar una nueva release de Ubuntu
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - --signal=TERM
+              - --kill-after=60s
+              - "600"
+              - do-release-upgrade
+              - -c
+          register: ubuntu_release_check
+          changed_when: false
+          failed_when: false
+          environment:
+            LANG: C
+            LC_ALL: C
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Validar la respuesta del comprobador de Ubuntu
+          ansible.builtin.assert:
+            that:
+              - ubuntu_release_check.rc in [0, 1]
+              - >-
+                'new release' in
+                (
+                  ubuntu_release_check.stdout
+                  ~ ' '
+                  ~ ubuntu_release_check.stderr
+                ) | lower
+                or 'no new release' in
+                (
+                  ubuntu_release_check.stdout
+                  ~ ' '
+                  ~ ubuntu_release_check.stderr
+                ) | lower
+            fail_msg: >-
+              No se pudo determinar de forma fiable si existe una release
+              Ubuntu nueva: {{ ubuntu_release_check.stdout_lines +
+              ubuntu_release_check.stderr_lines }}
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Determinar si Ubuntu tiene un salto disponible
+          ansible.builtin.set_fact:
+            ubuntu_release_available: >-
+              {{
+                'new release' in
+                (
+                  ubuntu_release_check.stdout
+                  ~ ' '
+                  ~ ubuntu_release_check.stderr
+                ) | lower
+                and 'no new release' not in
+                (
+                  ubuntu_release_check.stdout
+                  ~ ' '
+                  ~ ubuntu_release_check.stderr
+                ) | lower
+              }}
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Mostrar comprobación de release de Ubuntu
+          ansible.builtin.debug:
+            msg: >-
+              {{
+                ubuntu_release_check.stdout_lines
+                + ubuntu_release_check.stderr_lines
+              }}
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Ejecutar un salto soportado de Ubuntu
+          ansible.builtin.command:
+            argv:
+              - do-release-upgrade
+              - -f
+              - DistUpgradeViewNonInteractive
+          async: "{{ release_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          register: ubuntu_release_upgrade_result
+          changed_when: true
+          environment:
+            LANG: C
+            LC_ALL: C
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+            - ubuntu_release_available | default(false) | bool
+
+        - name: Registrar el salto de Ubuntu
+          ansible.builtin.set_fact:
+            os_release_upgraded: true
+          when:
+            - release_upgrade | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+            - ubuntu_release_available | default(false) | bool
+            - ubuntu_release_upgrade_result.rc | default(1) == 0
+
+        - name: Calcular el siguiente salto de Debian
+          ansible.builtin.set_fact:
+            debian_next_release: >-
+              {{
+                debian_release_map.get(
+                  ansible_facts['distribution_release'],
+                  ''
+                )
+              }}
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+
+        - name: Calcular la release objetivo de Debian
+          ansible.builtin.set_fact:
+            debian_target_release_final: >-
+              {{
+                debian_target_release
+                | default(debian_next_release)
+              }}
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+
+        - name: Validar que Debian solo avanza una release
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_facts['distribution_release'] == debian_latest_release
+                or debian_next_release | length > 0
+              - >-
+                debian_target_release_final | length == 0
+                or debian_target_release_final == debian_next_release
+            fail_msg: >-
+              Salto Debian no soportado: {{ ansible_facts['distribution_release'] }}
+              -> {{ debian_target_release_final | default('sin objetivo') }}.
+              Solo se permite avanzar una release por ejecución.
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+
+        - name: Crear directorio de respaldo para el salto Debian
+          ansible.builtin.file:
+            path: "/root/ansible-os-maintenance-{{ maintenance_run_id }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0700"
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Respaldar la configuración APT de Debian
+          ansible.builtin.command:
+            argv:
+              - tar
+              - -C
+              - /etc
+              - -czf
+              - "/root/ansible-os-maintenance-{{ maintenance_run_id }}/apt.tgz"
+              - apt
+          changed_when: true
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Respaldar la selección de paquetes Debian
+          ansible.builtin.shell:
+            cmd: >-
+              set -o pipefail &&
+              dpkg --get-selections >
+              /root/ansible-os-maintenance-{{ maintenance_run_id }}/packages.txt
+            executable: /bin/bash
+          changed_when: true
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Localizar repositorios Debian existentes
+          ansible.builtin.find:
+            paths:
+              - /etc/apt/sources.list.d
+            patterns:
+              - "*.list"
+              - "*.sources"
+            recurse: false
+            file_type: file
+          register: debian_repo_files
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Crear carpeta para repositorios desactivados
+          ansible.builtin.file:
+            path: >-
+              /etc/apt/sources.list.d/disabled-by-ansible-{{ maintenance_run_id }}
+            state: directory
+            owner: root
+            group: root
+            mode: "0700"
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Desactivar repositorios previos durante el salto Debian
+          ansible.builtin.command:
+            argv:
+              - mv
+              - "{{ item.path }}"
+              - >-
+                /etc/apt/sources.list.d/disabled-by-ansible-{{ maintenance_run_id }}/
+          loop: "{{ debian_repo_files.files | default([]) }}"
+          loop_control:
+            label: "{{ item.path }}"
+          changed_when: true
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Vaciar sources.list antes del salto Debian
+          ansible.builtin.copy:
+            dest: /etc/apt/sources.list
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Gestionado por update-upgrade.yml durante el OS upgrade.
+              # Repositorios oficiales en ansible-debian-release.sources.
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Configurar repositorios oficiales de la nueva Debian
+          ansible.builtin.copy:
+            dest: /etc/apt/sources.list.d/ansible-debian-release.sources
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              Types: deb
+              URIs: https://deb.debian.org/debian
+              Suites: {{ debian_target_release_final }} {{ debian_target_release_final }}-updates
+              Components: {{ debian_components_by_release[debian_target_release_final] }}
+              Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+              Types: deb
+              URIs: https://security.debian.org/debian-security
+              Suites: {{ debian_target_release_final }}-security
+              Components: {{ debian_components_by_release[debian_target_release_final] }}
+              Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Actualizar índices para la nueva Debian
+          ansible.builtin.command:
+            argv:
+              - apt-get
+              - -o
+              - "DPkg::Lock::Timeout={{ apt_lock_timeout_seconds }}"
+              - update
+              - --allow-releaseinfo-change
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          changed_when: false
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Simular el salto Debian con los repositorios nuevos
+          ansible.builtin.command:
+            argv:
+              - apt-get
+              - -s
+              - -o
+              - "DPkg::Lock::Timeout={{ apt_lock_timeout_seconds }}"
+              - dist-upgrade
+          register: debian_release_upgrade_simulation
+          changed_when: false
+          environment:
+            LANG: C
+            LC_ALL: C
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Proteger SSH y Tailscale durante el salto Debian
+          ansible.builtin.assert:
+            that:
+              - >-
+                'Remv openssh-server' not in
+                debian_release_upgrade_simulation.stdout
+              - >-
+                'Remv tailscale' not in
+                debian_release_upgrade_simulation.stdout
+            fail_msg: >-
+              El salto Debian intenta eliminar openssh-server o tailscale.
+              Se conserva el cordon y no se aplicará el dist-upgrade.
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Ejecutar upgrade mínimo de Debian
+          ansible.builtin.command:
+            argv:
+              - apt-get
+              - -y
+              - -o
+              - "DPkg::Lock::Timeout={{ apt_lock_timeout_seconds }}"
+              - -o
+              - Dpkg::Options::=--force-confdef
+              - -o
+              - Dpkg::Options::=--force-confold
+              - upgrade
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          changed_when: true
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Ejecutar dist-upgrade de Debian
+          ansible.builtin.command:
+            argv:
+              - apt-get
+              - -y
+              - -o
+              - "DPkg::Lock::Timeout={{ apt_lock_timeout_seconds }}"
+              - -o
+              - Dpkg::Options::=--force-confdef
+              - -o
+              - Dpkg::Options::=--force-confold
+              - dist-upgrade
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          changed_when: true
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Registrar el salto de Debian
+          ansible.builtin.set_fact:
+            os_release_upgraded: true
+          when:
+            - release_upgrade | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+            - debian_target_release_final | length > 0
+
+        - name: Reiniciar la conexión tras el salto de distribución
+          ansible.builtin.meta: reset_connection
+
+        - name: Refrescar facts tras el salto de distribución
+          ansible.builtin.setup:
+          when: os_release_upgraded | bool
+
+        - name: Verificar que Ubuntu cambió realmente de release
+          ansible.builtin.assert:
+            that:
+              - ansible_facts['distribution_release'] != initial_distribution_release
+            fail_msg: >-
+              do-release-upgrade terminó sin cambiar la release Ubuntu:
+              {{ initial_distribution_release }}.
+          when:
+            - os_release_upgraded | bool
+            - ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Verificar que Debian alcanzó la release objetivo
+          ansible.builtin.assert:
+            that:
+              - >-
+                ansible_facts['distribution_release']
+                == debian_target_release_final
+            fail_msg: >-
+              Debian no alcanzó {{ debian_target_release_final }}; sigue en
+              {{ ansible_facts['distribution_release'] }}.
+          when:
+            - os_release_upgraded | bool
+            - maintenance_debian_release_upgrade_allowed | bool
+
+        - name: Asegurar que los timers APT siguen detenidos
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            state: stopped
+            enabled: false
+          loop: "{{ apt_timers }}"
+          failed_when: false
+
+        - name: Esperar gestores de paquetes antes de la reparación final
+          ansible.builtin.command:
+            argv:
+              - pgrep
+              - -af
+              - >-
+                (^|/)(apt|apt-get|apt.systemd.daily|dpkg|do-release-upgrade|unattended-upgrade)( |$)
+          register: final_package_processes
+          changed_when: false
+          failed_when: final_package_processes.rc not in [0, 1]
+          retries: 240
+          delay: 30
+          until: final_package_processes.rc == 1
+
+        - name: Asegurar que los servicios automáticos APT siguen detenidos
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            state: stopped
+          loop: "{{ apt_automatic_services }}"
+          failed_when: false
+
+        - name: Esperar los locks APT y dpkg antes de la reparación final
+          ansible.builtin.command:
+            argv: "{{ ['fuser'] + apt_lock_files }}"
+          register: final_package_locks
+          changed_when: false
+          failed_when: final_package_locks.rc not in [0, 1]
+          retries: 240
+          delay: 30
+          until: final_package_locks.rc == 1
+
+        - name: Finalizar configuraciones dpkg tras el salto
+          ansible.builtin.command:
+            argv:
+              - dpkg
+              - --force-confdef
+              - --force-confold
+              - --configure
+              - -a
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          register: final_dpkg_configure
+          changed_when: final_dpkg_configure.stdout | length > 0
+
+        - name: Reparar dependencias tras el salto
+          ansible.builtin.apt:
+            state: fixed
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Actualizar índices tras el salto
+          ansible.builtin.apt:
+            update_cache: true
+            cache_valid_time: 0
+            update_cache_retries: 10
+            update_cache_retry_max_delay: 60
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Simular las actualizaciones finales con índices recientes
+          ansible.builtin.command:
+            argv:
+              - apt-get
+              - -s
+              - -o
+              - "DPkg::Lock::Timeout={{ apt_lock_timeout_seconds }}"
+              - dist-upgrade
+          register: final_upgrade_simulation
+          changed_when: false
+          environment:
+            LANG: C
+            LC_ALL: C
+
+        - name: Proteger SSH y Tailscale en las actualizaciones finales
+          ansible.builtin.assert:
+            that:
+              - "'Remv openssh-server' not in final_upgrade_simulation.stdout"
+              - "'Remv tailscale' not in final_upgrade_simulation.stdout"
+            fail_msg: >-
+              El plan APT final intenta eliminar openssh-server o tailscale.
+              Se conserva el cordon y no se aplicará el dist-upgrade.
+
+        - name: Aplicar cualquier actualización restante
+          ansible.builtin.apt:
+            upgrade: dist
+            dpkg_options: force-confdef,force-confold
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Eliminar paquetes innecesarios tras el salto
+          ansible.builtin.apt:
+            autoremove: true
+            purge: true
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Limpiar la caché APT
+          ansible.builtin.apt:
+            autoclean: true
+            force_apt_get: true
+            lock_timeout: "{{ apt_lock_timeout_seconds }}"
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+
+        - name: Comprobar si snap está instalado
+          ansible.builtin.stat:
+            path: /usr/bin/snap
+          register: snap_binary
+
+        - name: Actualizar snaps
+          ansible.builtin.command:
+            argv:
+              - snap
+              - refresh
+          async: "{{ package_operation_timeout_seconds }}"
+          poll: "{{ async_poll_seconds }}"
+          register: snap_refresh
+          changed_when: "'All snaps up to date' not in snap_refresh.stdout"
+          retries: 3
+          delay: 60
+          until: snap_refresh.rc == 0
+          when: snap_binary.stat.exists
+
+        - name: Auditar el estado final de dpkg
+          ansible.builtin.command:
+            argv:
+              - dpkg
+              - --audit
+          register: dpkg_audit
+          changed_when: false
+
+        - name: Exigir que dpkg quede consistente
+          ansible.builtin.assert:
+            that:
+              - dpkg_audit.stdout | trim | length == 0
+            fail_msg: "dpkg todavía informa de paquetes inconsistentes."
+
+        - name: Marcar el estado de paquetes como seguro
+          ansible.builtin.set_fact:
+            package_state_safe: true
+
+        - name: Consultar paquetes retenidos
+          ansible.builtin.command:
+            argv:
+              - apt-mark
+              - showhold
+          register: held_packages
+          changed_when: false
+
+        - name: Consultar paquetes pendientes
+          ansible.builtin.command:
+            argv:
+              - apt
+              - list
+              - --upgradable
+          register: upgradable_packages
+          changed_when: false
+          failed_when: upgradable_packages.rc != 0
+          environment:
+            LANG: C
+            LC_ALL: C
+
+        - name: Exigir que no queden paquetes retenidos o actualizables
+          ansible.builtin.assert:
+            that:
+              - held_packages.stdout_lines | length == 0
+              - >-
+                upgradable_packages.stdout_lines
+                | reject('match', '^Listing')
+                | list
+                | length == 0
+            fail_msg: >-
+              La actualización no quedó completa. Retenidos:
+              {{ held_packages.stdout_lines }}. Pendientes:
+              {{ upgradable_packages.stdout_lines }}.
+
+        - name: Comprobar requisito final de reinicio
+          ansible.builtin.stat:
+            path: /var/run/reboot-required
+          register: final_reboot_marker
+
+        - name: Decidir el reinicio final
+          ansible.builtin.set_fact:
+            maintenance_reboot_needed: >-
+              {{
+                maintenance_always_reboot | bool
+                or os_release_upgraded | bool
+                or final_reboot_marker.stat.exists
+                or maintenance_swap_needed | bool
+              }}
+
+        - name: Desactivar la swap temporal antes del reinicio final
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - --signal=TERM
+              - --kill-after=60s
+              - "600"
+              - swapoff
+              - "{{ maintenance_swap_path }}"
+          register: final_swapoff
+          changed_when: final_swapoff.rc == 0
+          failed_when: false
+          when: maintenance_swap_needed | bool
+
+        - name: Eliminar la swap si se pudo desactivar
+          ansible.builtin.file:
+            path: "{{ maintenance_swap_path }}"
+            state: absent
+          when:
+            - maintenance_swap_needed | bool
+            - final_swapoff.rc | default(1) == 0
+
+        - name: Reiniciar el nodo tras las actualizaciones
+          ansible.builtin.reboot:
+            msg: "Reinicio final tras update y OS upgrade iniciado por Ansible"
+            reboot_timeout: "{{ reboot_timeout_seconds }}"
+            connect_timeout: 30
+            post_reboot_delay: 45
+            test_command: whoami
+          when: maintenance_reboot_needed | bool
+
+        - name: Reiniciar la conexión tras el reboot
+          ansible.builtin.meta: reset_connection
+
+        - name: Refrescar facts finales
+          ansible.builtin.setup:
+
+        - name: Eliminar cualquier swap temporal restante
+          ansible.builtin.file:
+            path: "{{ maintenance_swap_path }}"
+            state: absent
+          when: maintenance_swap_needed | bool
+
+        - name: Arrancar y habilitar K3s
+          ansible.builtin.systemd:
+            name: "{{ k3s_service_name }}"
+            state: started
+            enabled: true
+            daemon_reload: true
+
+        - name: Esperar a que tailscaled esté activo
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - is-active
+              - tailscaled
+          register: tailscale_active
+          changed_when: false
+          retries: 30
+          delay: 10
+          until: tailscale_active.rc == 0
+
+        - name: Comprobar la interfaz Tailscale tras actualizar
+          ansible.builtin.command:
+            argv:
+              - ip
+              - link
+              - show
+              - tailscale0
+          changed_when: false
+
+        - name: Esperar a que la API de Kubernetes responda
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - get
+              - --raw=/readyz
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: api_ready
+          changed_when: false
+          retries: 60
+          delay: 10
+          until: api_ready.rc == 0
+
+        - name: Esperar a que el nodo vuelva a Ready
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - wait
+              - --for=condition=Ready
+              - "node/{{ k3s_node_name }}"
+              - "--timeout={{ node_ready_timeout }}"
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          changed_when: false
+
+        - name: Comprobar cada miembro etcd tras recuperar el nodo
+          ansible.builtin.uri:
+            url: "{{ etcd_health_url }}"
+            method: GET
+            ca_path: "{{ etcd_ca_path }}"
+            client_cert: "{{ etcd_client_cert_path }}"
+            client_key: "{{ etcd_client_key_path }}"
+            return_content: true
+            status_code: 200
+            timeout: 30
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['server'] }}"
+          register: etcd_health_after_node
+
+        - name: Exigir quorum sano antes del uncordon
+          ansible.builtin.assert:
+            that:
+              - item.json.health | string | lower == 'true'
+            fail_msg: >-
+              El miembro etcd de {{ item.item }} no puede confirmar
+              salud/quorum tras recuperar {{ inventory_hostname }}:
+              {{ item.content | default(item.msg | default('sin respuesta')) }}.
+          loop: "{{ etcd_health_after_node.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+
+        - name: Consultar alarmas etcd antes del uncordon
+          ansible.builtin.uri:
+            url: "{{ etcd_alarm_url }}"
+            method: POST
+            body_format: json
+            body: {}
+            ca_path: "{{ etcd_ca_path }}"
+            client_cert: "{{ etcd_client_cert_path }}"
+            client_key: "{{ etcd_client_key_path }}"
+            return_content: true
+            status_code: 200
+            timeout: 30
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: etcd_alarms_after_node
+
+        - name: Consultar membership etcd antes del uncordon
+          ansible.builtin.uri:
+            url: "{{ etcd_members_url }}"
+            method: POST
+            body_format: json
+            body:
+              linearizable: true
+            ca_path: "{{ etcd_ca_path }}"
+            client_cert: "{{ etcd_client_cert_path }}"
+            client_key: "{{ etcd_client_key_path }}"
+            return_content: true
+            status_code: 200
+            timeout: 30
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: etcd_members_after_node
+
+        - name: Exigir exactamente los voters etcd antes del uncordon
+          ansible.builtin.assert:
+            that:
+              - etcd_members_after_node.json is mapping
+              - >-
+                (
+                  etcd_members_after_node.json.members
+                  | default([])
+                  | length
+                ) == (groups['server'] | length)
+              - >-
+                (
+                  etcd_members_after_node.json.members
+                  | default([])
+                  | map(attribute='name')
+                  | sort
+                  | list
+                ) == (expected_etcd_member_names | sort)
+              - >-
+                etcd_members_after_node.json.members
+                | default([])
+                | selectattr('isLearner', 'defined')
+                | selectattr('isLearner')
+                | list
+                | length == 0
+              - >-
+                etcd_members_after_node.json.members
+                | default([])
+                | selectattr('clientURLs', 'undefined')
+                | list
+                | length == 0
+              - >-
+                etcd_members_after_node.json.members
+                | default([])
+                | selectattr('clientURLs', 'defined')
+                | selectattr('clientURLs', 'equalto', [])
+                | list
+                | length == 0
+            fail_msg: >-
+              El membership etcd no coincide exactamente con
+              {{ expected_etcd_member_names }} o contiene miembros sin
+              iniciar/learners:
+              {{ etcd_members_after_node.json.members | default([]) }}.
+
+        - name: Exigir que etcd no tenga alarmas antes del uncordon
+          ansible.builtin.assert:
+            that:
+              - etcd_alarms_after_node.json is mapping
+              - etcd_alarms_after_node.json.alarms | default([]) | length == 0
+            fail_msg: >-
+              etcd tiene alarmas activas:
+              {{ etcd_alarms_after_node.json.alarms | default([]) }}.
+
+        - name: Volver a habilitar planificación en el nodo
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - uncordon
+              - "{{ k3s_node_name }}"
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: uncordon_result
+          changed_when: "'already uncordoned' not in uncordon_result.stdout"
+          when: maintenance_should_uncordon | bool
+
+        - name: Registrar que el nodo ya está habilitado
+          ansible.builtin.set_fact:
+            node_uncordoned_by_playbook: true
+            node_cordon_confirmed: false
+          when: maintenance_should_uncordon | bool
+
+        - name: Esperar a que todos los nodos sigan Ready
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - wait
+              - --for=condition=Ready
+              - nodes
+              - --all
+              - --timeout=120s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          changed_when: false
+
+        - name: Listar deployments al finalizar el nodo
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - get
+              - deployment
+              - --all-namespaces
+              - -o
+              - json
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: deployments_after_maintenance
+          changed_when: false
+
+        - name: Esperar el rollout final de cada deployment
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - rollout
+              - status
+              - "deployment/{{ item.metadata.name }}"
+              - --namespace
+              - "{{ item.metadata.namespace }}"
+              - "--timeout={{ workload_ready_timeout }}"
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          loop: "{{ (deployments_after_maintenance.stdout | from_json).items }}"
+          loop_control:
+            label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
+          changed_when: false
+
+        - name: Listar StatefulSets al finalizar el nodo
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - get
+              - statefulset
+              - --all-namespaces
+              - -o
+              - json
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: statefulsets_after_maintenance
+          changed_when: false
+
+        - name: Esperar el rollout final de cada StatefulSet
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - rollout
+              - status
+              - "statefulset/{{ item.metadata.name }}"
+              - --namespace
+              - "{{ item.metadata.namespace }}"
+              - "--timeout={{ workload_ready_timeout }}"
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          loop: "{{ (statefulsets_after_maintenance.stdout | from_json).items }}"
+          loop_control:
+            label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
+          changed_when: false
+
+        - name: Dar tiempo al clúster para estabilizarse
+          ansible.builtin.pause:
+            seconds: "{{ cluster_settle_seconds }}"
+
+        - name: Retirar la marca solo tras todas las validaciones finales
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - annotate
+              - node
+              - "{{ k3s_node_name }}"
+              - "{{ maintenance_annotation }}-"
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: remove_annotation
+          changed_when: >-
+            remove_annotation.rc == 0
+            and 'not annotated' not in remove_annotation.stdout
+          failed_when:
+            - remove_annotation.rc != 0
+            - >-
+              'not found' not in
+              (remove_annotation.stdout ~ ' ' ~ remove_annotation.stderr) | lower
+          retries: 3
+          delay: 5
+          until: >-
+            remove_annotation.rc == 0
+            or 'not found' in
+            (remove_annotation.stdout ~ ' ' ~ remove_annotation.stderr) | lower
+          when: maintenance_should_uncordon | bool
+
+        - name: Mostrar resumen del nodo
+          ansible.builtin.debug:
+            msg:
+              - "Host: {{ inventory_hostname }}"
+              - >-
+                OS: {{ ansible_facts['distribution'] }}
+                {{ ansible_facts['distribution_version'] }}
+                ({{ ansible_facts['distribution_release'] }})
+              - "Kernel: {{ ansible_facts['kernel'] }}"
+              - "OS upgrade ejecutado: {{ os_release_upgraded }}"
+              - "Reboot ejecutado: {{ maintenance_reboot_needed }}"
+              - "Paquetes retenidos: {{ held_packages.stdout_lines }}"
+              - "Paquetes pendientes: {{ upgradable_packages.stdout_lines }}"
+              - >-
+                Estado de planificación restaurado:
+                {{ maintenance_should_uncordon }}
+
+      rescue:
+        - name: Volver a cordonar el nodo ante cualquier fallo transaccional
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - cordon
+              - "{{ k3s_node_name }}"
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: rescue_cordon
+          changed_when: false
+          failed_when: false
+
+        - name: Registrar el cordon de recuperación
+          ansible.builtin.set_fact:
+            node_cordon_confirmed: >-
+              {{
+                node_cordon_confirmed | default(false) | bool
+                or rescue_cordon.rc | default(1) == 0
+              }}
+            node_uncordoned_by_playbook: >-
+              {{
+                node_uncordoned_by_playbook | bool
+                and rescue_cordon.rc | default(1) != 0
+              }}
+
+        - name: Conservar la marca de reanudación tras el fallo
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - annotate
+              - node
+              - "{{ k3s_node_name }}"
+              - "{{ maintenance_annotation }}={{ maintenance_annotation_value }}"
+              - --overwrite
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: rescue_annotation
+          changed_when: false
+          failed_when: false
+          when: maintenance_should_uncordon | bool
+
+        - name: Informar del fallo que detiene el rolling
+          ansible.builtin.debug:
+            msg:
+              - "Falló: {{ ansible_failed_task.name | default('tarea desconocida') }}"
+              - >-
+                Detalle:
+                {{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('sin detalle')) }}
+              - >-
+                Se intentará recuperar dpkg y K3s. Cordon de seguridad confirmado:
+                {{ node_cordon_confirmed | default(false) }}.
+                No se tocará ningún otro nodo.
+
+        - name: Buscar gestores de paquetes antes de reparar
+          ansible.builtin.command:
+            argv:
+              - pgrep
+              - -af
+              - >-
+                (^|/)(apt|apt-get|apt.systemd.daily|dpkg|do-release-upgrade|unattended-upgrade)( |$)
+          register: rescue_package_processes
+          changed_when: false
+          failed_when: rescue_package_processes.rc not in [0, 1]
+          when: package_maintenance_started | bool
+
+        - name: No competir con un gestor de paquetes que sigue vivo
+          ansible.builtin.fail:
+            msg: >-
+              Continúan activos estos procesos:
+              {{ rescue_package_processes.stdout_lines }}. Para evitar OOM o
+              corrupción, K3s permanece detenido, la swap sigue activa y el
+              nodo continúa cordonado. Espera y vuelve a ejecutar el playbook.
+          when:
+            - package_maintenance_started | bool
+            - rescue_package_processes.rc == 0
+
+        - name: Intentar completar dpkg sin espera indefinida
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - --signal=TERM
+              - --kill-after=60s
+              - "1800"
+              - dpkg
+              - --force-confdef
+              - --force-confold
+              - --configure
+              - -a
+          register: rescue_dpkg
+          changed_when: rescue_dpkg.stdout | length > 0
+          failed_when: false
+          when:
+            - package_maintenance_started | bool
+            - rescue_package_processes.rc | default(0) == 1
+
+        - name: Intentar reparar dependencias sin espera indefinida
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - --signal=TERM
+              - --kill-after=60s
+              - "1800"
+              - apt-get
+              - -y
+              - -o
+              - DPkg::Lock::Timeout=1800
+              - -o
+              - Dpkg::Options::=--force-confdef
+              - -o
+              - Dpkg::Options::=--force-confold
+              - --fix-broken
+              - install
+          register: rescue_apt_repair
+          changed_when: >-
+            '0 upgraded, 0 newly installed, 0 to remove' not in
+            rescue_apt_repair.stdout
+          when:
+            - package_maintenance_started | bool
+            - rescue_package_processes.rc | default(0) == 1
+
+        - name: Completar dpkg tras reparar dependencias en rescue
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - --signal=TERM
+              - --kill-after=60s
+              - "1800"
+              - dpkg
+              - --force-confdef
+              - --force-confold
+              - --configure
+              - -a
+          register: rescue_final_dpkg
+          changed_when: rescue_final_dpkg.stdout | length > 0
+          when:
+            - package_maintenance_started | bool
+            - rescue_package_processes.rc | default(0) == 1
+
+        - name: Auditar dpkg antes de arrancar K3s tras el fallo
+          ansible.builtin.command:
+            argv:
+              - dpkg
+              - --audit
+          register: rescue_dpkg_audit
+          changed_when: false
+          when: package_maintenance_started | bool
+
+        - name: Exigir dpkg consistente para continuar la recuperación
+          ansible.builtin.assert:
+            that:
+              - rescue_dpkg_audit.stdout | trim | length == 0
+            fail_msg: >-
+              dpkg continúa inconsistente. K3s permanece detenido, la swap
+              sigue disponible y el nodo continúa cordonado.
+          when: package_maintenance_started | bool
+
+        - name: Desactivar swap temporal durante la recuperación
+          ansible.builtin.command:
+            argv:
+              - timeout
+              - --signal=TERM
+              - --kill-after=60s
+              - "600"
+              - swapoff
+              - "{{ maintenance_swap_path }}"
+          register: rescue_swapoff
+          changed_when: rescue_swapoff.rc == 0
+          failed_when: false
+          when: maintenance_swap_needed | bool
+
+        - name: Comprobar swap tras el intento de recuperación
+          ansible.builtin.command:
+            argv:
+              - swapon
+              - --show=NAME
+              - --noheadings
+          register: rescue_active_swaps
+          changed_when: false
+          when: maintenance_swap_needed | bool
+
+        - name: Reiniciar si no fue posible liberar la swap en el rescue
+          ansible.builtin.reboot:
+            msg: "Reinicio de rescue para retirar swap temporal"
+            reboot_timeout: "{{ reboot_timeout_seconds }}"
+            connect_timeout: 30
+            post_reboot_delay: 30
+            test_command: whoami
+          when:
+            - maintenance_swap_needed | bool
+            - maintenance_swap_path in rescue_active_swaps.stdout
+
+        - name: Reiniciar conexión tras el reboot del rescue
+          ansible.builtin.meta: reset_connection
+
+        - name: Verificar swaps después del fallback de recuperación
+          ansible.builtin.command:
+            argv:
+              - swapon
+              - --show=NAME
+              - --noheadings
+          register: rescue_swaps_after_fallback
+          changed_when: false
+          when: maintenance_swap_needed | bool
+
+        - name: Exigir que la swap temporal ya no esté activa
+          ansible.builtin.assert:
+            that:
+              - maintenance_swap_path not in rescue_swaps_after_fallback.stdout
+            fail_msg: >-
+              La swap temporal sigue activa. No se eliminará ni se arrancará
+              K3s para evitar que kubelet quede NotReady.
+          when: maintenance_swap_needed | bool
+
+        - name: Eliminar swap temporal recuperada
+          ansible.builtin.file:
+            path: "{{ maintenance_swap_path }}"
+            state: absent
+          when:
+            - maintenance_swap_needed | bool
+            - maintenance_swap_path not in rescue_swaps_after_fallback.stdout
+
+        - name: Intentar arrancar K3s tras el fallo
+          ansible.builtin.systemd:
+            name: "{{ k3s_service_name }}"
+            state: started
+          register: rescue_k3s
+          failed_when: false
+
+        - name: Comprobar si el nodo se recuperó como Ready
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - wait
+              - --for=condition=Ready
+              - "node/{{ k3s_node_name }}"
+              - --timeout=5m
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: rescue_node_ready
+          changed_when: false
+          failed_when: false
+
+        - name: Revertir el cordon si todavía no se modificaron paquetes
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - uncordon
+              - "{{ k3s_node_name }}"
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          register: rescue_uncordon
+          changed_when: rescue_uncordon.rc == 0
+          failed_when: false
+          when:
+            - not package_maintenance_started | bool
+            - maintenance_should_uncordon | bool
+            - rescue_node_ready.rc == 0
+
+        - name: Retirar la marca si se revirtió el cordon
+          ansible.builtin.command:
+            argv:
+              - "{{ k3s_binary }}"
+              - kubectl
+              - --kubeconfig
+              - "{{ k3s_kubeconfig }}"
+              - annotate
+              - node
+              - "{{ k3s_node_name }}"
+              - "{{ maintenance_annotation }}-"
+              - --request-timeout=30s
+          delegate_to: "{{ maintenance_kubectl_host }}"
+          changed_when: false
+          failed_when: false
+          when:
+            - rescue_uncordon.rc | default(1) == 0
+
+        - name: Registrar el rollback seguro del cordon
+          ansible.builtin.set_fact:
+            node_uncordoned_by_playbook: true
+            node_cordon_confirmed: false
+          when: rescue_uncordon.rc | default(1) == 0
+
+        - name: Detener todo el mantenimiento
+          ansible.builtin.fail:
+            msg: >-
+              Mantenimiento abortado en {{ inventory_hostname }}. Cordon de
+              seguridad confirmado:
+              {{ node_cordon_confirmed | default(false) }}. Corrige el problema
+              y vuelve a ejecutar este playbook; la
+              anotación permite que Ansible haga uncordon solo después de validar
+              que el nodo está sano. Ready de recuperación:
+              {{ rescue_node_ready.rc == 0 }}.
+
+      always:
+        - name: Retirar la configuración temporal de updates phased
+          ansible.builtin.file:
+            path: "{{ ubuntu_phased_updates_config }}"
+            state: absent
+          failed_when: false
+          when: ansible_facts['distribution'] == 'Ubuntu'
+
+        - name: Restaurar de forma transaccional apt-daily.timer
+          when:
+            - package_state_safe | bool
+            - apt_timer_restore['apt-daily.timer'] | default(false) | bool
+          block:
+            - name: Habilitar y arrancar apt-daily.timer
+              ansible.builtin.systemd:
+                name: apt-daily.timer
+                state: started
+                enabled: true
+
+            - name: Retirar el marker restaurado de apt-daily.timer
+              ansible.builtin.file:
+                path: "{{ maintenance_state_dir }}/apt-daily.timer.restore"
+                state: absent
+
+        - name: Restaurar de forma transaccional apt-daily-upgrade.timer
+          when:
+            - package_state_safe | bool
+            - >-
+              apt_timer_restore['apt-daily-upgrade.timer']
+              | default(false)
+              | bool
+          block:
+            - name: Habilitar y arrancar apt-daily-upgrade.timer
+              ansible.builtin.systemd:
+                name: apt-daily-upgrade.timer
+                state: started
+                enabled: true
+
+            - name: Retirar el marker restaurado de apt-daily-upgrade.timer
+              ansible.builtin.file:
+                path: >-
+                  {{ maintenance_state_dir }}/apt-daily-upgrade.timer.restore
+                state: absent
+
+    - name: Registrar que el nodo terminó todo el mantenimiento
+      ansible.builtin.set_fact:
+        maintenance_node_complete: true
+
+    - name: Cerrar el modo reanudación tras recuperar su nodo
+      ansible.builtin.set_fact:
+        maintenance_resume_node: ""
+      delegate_to: "{{ maintenance_state_host }}"
+      delegate_facts: true
+      when: >-
+        hostvars[maintenance_state_host].maintenance_resume_node
+        | default('') == inventory_hostname
+
+    - name: Marcar el rolling completo al terminar el último nodo
+      ansible.builtin.set_fact:
+        maintenance_rollout_complete: true
+      delegate_to: "{{ maintenance_state_host }}"
+      delegate_facts: true
+      when: inventory_hostname == groups['k3s_maintenance_targets'] | first
+
+- name: Liberar el lock tras completar todo el rolling
+  hosts: localhost
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+
+  vars:
+    k3s_binary: /usr/local/bin/k3s
+    k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    maintenance_lock_name: ansible-os-maintenance-lock
+    maintenance_lock_namespace: kube-system
+
+  tasks:
+    - name: Exigir que el último nodo haya terminado
+      ansible.builtin.assert:
+        that:
+          - maintenance_rollout_complete | default(false) | bool
+        fail_msg: >-
+          El rolling no llegó al último nodo; el lock se conserva para impedir
+          otra ejecución concurrente.
+
+    - name: Reinicializar controladores para liberar el lock
+      ansible.builtin.set_fact:
+        maintenance_healthy_controllers: []
+
+    - name: Sondear controladores antes de liberar el lock
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - --raw=/readyz
+          - --request-timeout=30s
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_maintenance_controllers'] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: final_controller_probes
+      changed_when: false
+      failed_when: false
+      ignore_unreachable: true
+
+    - name: Recopilar controladores sanos para liberar el lock
+      ansible.builtin.set_fact:
+        maintenance_healthy_controllers: >-
+          {{ maintenance_healthy_controllers + [item.item] }}
+      loop: "{{ final_controller_probes.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - not item.unreachable | default(false) | bool
+        - item.rc | default(1) == 0
+
+    - name: Exigir un controlador sano para liberar el lock
+      ansible.builtin.assert:
+        that:
+          - maintenance_healthy_controllers | length > 0
+
+    - name: Elegir controlador final
+      ansible.builtin.set_fact:
+        maintenance_kubectl_host: >-
+          {{ maintenance_healthy_controllers | first }}
+
+    - name: Comprobar que el lock sigue siendo de esta ejecución
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - get
+          - configmap
+          - "{{ maintenance_lock_name }}"
+          - --namespace
+          - "{{ maintenance_lock_namespace }}"
+          - -o
+          - "jsonpath={.data.run_id}"
+          - --request-timeout=30s
+      register: final_maintenance_lock
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
+
+    - name: Exigir propiedad del lock antes de liberarlo
+      ansible.builtin.assert:
+        that:
+          - final_maintenance_lock.stdout == maintenance_global_run_id
+        fail_msg: >-
+          El lock ya no pertenece a esta ejecución. No se eliminará.
+
+    - name: Liberar el lock global
+      ansible.builtin.command:
+        argv:
+          - "{{ k3s_binary }}"
+          - kubectl
+          - --kubeconfig
+          - "{{ k3s_kubeconfig }}"
+          - delete
+          - configmap
+          - "{{ maintenance_lock_name }}"
+          - --namespace
+          - "{{ maintenance_lock_namespace }}"
+          - --request-timeout=30s
+      delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: true

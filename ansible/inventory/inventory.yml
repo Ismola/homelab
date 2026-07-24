@@ -122,3 +122,28 @@ k3s_cluster:
       --node-label=isma.dev/cpu={{ cpu }}
 
     user_kubectl: true
+
+# Alcance explícito del mantenimiento rolling. El orden está pensado para usar
+# `order: reverse_inventory`: primero agents y después servers, dejando v3
+# (api_endpoint) para el final.
+k3s_maintenance_targets:
+  hosts:
+    v3:
+    v7:
+    rpi:
+    v1:
+    v2:
+    v4:
+    v5:
+    v6:
+
+# Candidatos redundantes para kubectl/etcd. El playbook elige uno sano y, al
+# mantener un server, usa siempre otro distinto.
+k3s_maintenance_controllers:
+  hosts:
+    rpi:
+    v7:
+    v3:
+
+# El orquestador usa el localhost implícito de Ansible. No debe declararse aquí:
+# entraría en `all` y quedaría expuesto a reboot.yml y shutdown.yml.
