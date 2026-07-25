@@ -34,6 +34,7 @@
     etcd_client_cert_path: /var/lib/rancher/k3s/server/tls/etcd/client.crt
     etcd_client_key_path: /var/lib/rancher/k3s/server/tls/etcd/client.key
     etcd_member_name_path: /var/lib/rancher/k3s/server/db/etcd/name
+    etcdctl_binary: /usr/bin/etcdctl
 
   tasks:
     - name: Validar el orquestador y los controladores candidatos
@@ -170,6 +171,16 @@
         maintenance_lock_acquired: true
         maintenance_rollout_complete: false
 
+    - name: Instalar el cliente nativo de etcd en los servidores
+      ansible.builtin.apt:
+        name: etcd-client
+        state: present
+        update_cache: false
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'] }}"
+      loop_control:
+        label: "{{ item }}"
+
     - name: Leer todos los nodos para detectar cordons previos
       ansible.builtin.command:
         argv:
@@ -195,7 +206,7 @@
       ansible.builtin.set_fact:
         maintenance_unschedulable_nodes: >-
           {{ maintenance_unschedulable_nodes + [item.metadata.name] }}
-      loop: "{{ (maintenance_nodes_query.stdout | from_json).items }}"
+      loop: "{{ (maintenance_nodes_query.stdout | from_json)['items'] }}"
       loop_control:
         label: "{{ item.metadata.name }}"
       when: item.spec.unschedulable | default(false) | bool
@@ -204,7 +215,7 @@
       ansible.builtin.set_fact:
         maintenance_owned_nodes: >-
           {{ maintenance_owned_nodes + [item.metadata.name] }}
-      loop: "{{ (maintenance_nodes_query.stdout | from_json).items }}"
+      loop: "{{ (maintenance_nodes_query.stdout | from_json)['items'] }}"
       loop_control:
         label: "{{ item.metadata.name }}"
       when: >-
@@ -323,24 +334,26 @@
       when: maintenance_resume_node | length > 0
 
     - name: Comprobar los miembros etcd que sostendrán la recuperación
-      ansible.builtin.uri:
-        url: "{{ etcd_health_url }}"
-        method: GET
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - endpoint
+          - health
       delegate_to: "{{ item }}"
       loop: "{{ recovery_etcd_guard_hosts | default([]) }}"
       register: recovery_guard_etcd_health
+      changed_when: false
       when: maintenance_resume_node | length > 0
 
     - name: Exigir quorum sano antes de recuperar un nodo
       ansible.builtin.assert:
         that:
-          - item.json.health | string | lower == 'true'
+          - (item.stdout | from_json | first).health | bool
         fail_msg: >-
           El miembro etcd de {{ item.item }} no puede sostener la recuperación:
           {{ item.content | default(item.msg | default('sin respuesta')) }}.
@@ -370,35 +383,34 @@
       when: maintenance_resume_node | length > 0
 
     - name: Consultar membership etcd antes de la recuperación
-      ansible.builtin.uri:
-        url: "{{ etcd_members_url }}"
-        method: POST
-        body_format: json
-        body:
-          linearizable: true
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - member
+          - list
       register: recovery_guard_etcd_members
       delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
       when: maintenance_resume_node | length > 0
 
     - name: Validar voters etcd antes de recuperar el nodo
       ansible.builtin.assert:
         that:
-          - recovery_guard_etcd_members.json is mapping
+          - recovery_guard_etcd_members.stdout | from_json is mapping
           - >-
             (
-              recovery_guard_etcd_members.json.members
+              (recovery_guard_etcd_members.stdout | from_json).members
               | default([])
               | length
             ) == (groups['server'] | length)
           - >-
             (
-              recovery_guard_etcd_members.json.members
+              (recovery_guard_etcd_members.stdout | from_json).members
               | default([])
               | map(attribute='name')
               | list
@@ -409,27 +421,27 @@
           - >-
             recovery_expected_etcd_member_names
             | difference(
-                recovery_guard_etcd_members.json.members
+                (recovery_guard_etcd_members.stdout | from_json).members
                 | default([])
                 | map(attribute='name')
                 | list
               )
             | length == 0
           - >-
-            recovery_guard_etcd_members.json.members
+            (recovery_guard_etcd_members.stdout | from_json).members
             | default([])
             | selectattr('isLearner', 'defined')
             | selectattr('isLearner')
             | list
             | length == 0
           - >-
-            recovery_guard_etcd_members.json.members
+            (recovery_guard_etcd_members.stdout | from_json).members
             | default([])
             | selectattr('clientURLs', 'undefined')
             | list
             | length == 0
           - >-
-            recovery_guard_etcd_members.json.members
+            (recovery_guard_etcd_members.stdout | from_json).members
             | default([])
             | selectattr('clientURLs', 'defined')
             | selectattr('clientURLs', 'equalto', [])
@@ -438,38 +450,38 @@
         fail_msg: >-
           El membership etcd no es seguro para recuperar
           {{ maintenance_resume_node }}:
-          {{ recovery_guard_etcd_members.json.members | default([]) }}.
+          {{ (recovery_guard_etcd_members.stdout | from_json).members | default([]) }}.
           Debe conservar todos sus voters y, como mínimo, los miembros sanos
           {{ recovery_expected_etcd_member_names }}.
       when: maintenance_resume_node | length > 0
 
     - name: Consultar alarmas etcd antes de la recuperación
-      ansible.builtin.uri:
-        url: "{{ etcd_alarm_url }}"
-        method: POST
-        body_format: json
-        body: {}
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - alarm
+          - list
       register: recovery_guard_etcd_alarms
       delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
       when: maintenance_resume_node | length > 0
 
     - name: Impedir la recuperación con alarmas etcd activas
       ansible.builtin.assert:
         that:
-          - recovery_guard_etcd_alarms.json is mapping
+          - recovery_guard_etcd_alarms.stdout | from_json is mapping
           - >-
-            recovery_guard_etcd_alarms.json.alarms
+            (recovery_guard_etcd_alarms.stdout | from_json).alarms
             | default([])
             | length == 0
         fail_msg: >-
           etcd tiene alarmas activas:
-          {{ recovery_guard_etcd_alarms.json.alarms | default([]) }}.
+          {{ (recovery_guard_etcd_alarms.stdout | from_json).alarms | default([]) }}.
       when: maintenance_resume_node | length > 0
 
 - name: Recuperar el servicio de un nodo interrumpido
@@ -724,15 +736,16 @@
       until: recovery_package_locks.rc == 1
 
     - name: Revalidar etcd justo antes de detener un server en recuperación
-      ansible.builtin.uri:
-        url: "{{ etcd_health_url }}"
-        method: GET
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - endpoint
+          - health
       delegate_to: "{{ item }}"
       loop: >-
         {{
@@ -741,12 +754,13 @@
           | list
         }}
       register: recovery_etcd_health_immediately_before_stop
+      changed_when: false
       when: inventory_hostname in groups['server']
 
     - name: Exigir que los demás voters sostengan la parada de recuperación
       ansible.builtin.assert:
         that:
-          - item.json.health | string | lower == 'true'
+          - (item.stdout | from_json | first).health | bool
         fail_msg: >-
           No se detendrá K3s en {{ inventory_hostname }}: el voter
           {{ item.item }} ya no confirma quorum.
@@ -983,44 +997,46 @@
           {{ maintenance_healthy_controllers | first }}
 
     - name: Comprobar la salud local de cada miembro etcd
-      ansible.builtin.uri:
-        url: "{{ etcd_health_url }}"
-        method: GET
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - endpoint
+          - health
       delegate_to: "{{ item }}"
       loop: "{{ groups['server'] }}"
       register: initial_etcd_health
+      changed_when: false
 
     - name: Exigir que cada miembro etcd pueda confirmar quorum
       ansible.builtin.assert:
         that:
-          - item.json.health | string | lower == 'true'
+          - (item.stdout | from_json | first).health | bool
         fail_msg: >-
           El miembro etcd de {{ item.item }} no está sano:
-          {{ item.content | default(item.msg | default('sin respuesta')) }}.
+          {{ item.stdout | default(item.stderr | default('sin respuesta')) }}.
       loop: "{{ initial_etcd_health.results }}"
       loop_control:
         label: "{{ item.item }}"
 
     - name: Consultar alarmas globales de etcd
-      ansible.builtin.uri:
-        url: "{{ etcd_alarm_url }}"
-        method: POST
-        body_format: json
-        body: {}
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - alarm
+          - list
       register: initial_etcd_alarms
       delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
 
     - name: Leer los nombres persistentes de los miembros etcd
       ansible.builtin.slurp:
@@ -1041,54 +1057,53 @@
         label: "{{ item.item }}"
 
     - name: Consultar el membership real de etcd
-      ansible.builtin.uri:
-        url: "{{ etcd_members_url }}"
-        method: POST
-        body_format: json
-        body:
-          linearizable: true
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - member
+          - list
       register: initial_etcd_members
       delegate_to: "{{ maintenance_kubectl_host }}"
+      changed_when: false
 
     - name: Exigir exactamente los voters etcd esperados
       ansible.builtin.assert:
         that:
-          - initial_etcd_members.json is mapping
+          - initial_etcd_members.stdout | from_json is mapping
           - >-
             (
-              initial_etcd_members.json.members
+              (initial_etcd_members.stdout | from_json).members
               | default([])
               | length
             ) == (groups['server'] | length)
           - >-
             (
-              initial_etcd_members.json.members
+              (initial_etcd_members.stdout | from_json).members
               | default([])
               | map(attribute='name')
               | sort
               | list
             ) == (initial_expected_etcd_member_names | sort)
           - >-
-            initial_etcd_members.json.members
+            (initial_etcd_members.stdout | from_json).members
             | default([])
             | selectattr('isLearner', 'defined')
             | selectattr('isLearner')
             | list
             | length == 0
           - >-
-            initial_etcd_members.json.members
+            (initial_etcd_members.stdout | from_json).members
             | default([])
             | selectattr('clientURLs', 'undefined')
             | list
             | length == 0
           - >-
-            initial_etcd_members.json.members
+            (initial_etcd_members.stdout | from_json).members
             | default([])
             | selectattr('clientURLs', 'defined')
             | selectattr('clientURLs', 'equalto', [])
@@ -1098,16 +1113,19 @@
           El membership etcd no coincide exactamente con
           {{ initial_expected_etcd_member_names }} o contiene miembros sin
           iniciar/learners:
-          {{ initial_etcd_members.json.members | default([]) }}.
+          {{ (initial_etcd_members.stdout | from_json).members | default([]) }}.
 
     - name: Impedir el mantenimiento con alarmas etcd activas
       ansible.builtin.assert:
         that:
-          - initial_etcd_alarms.json is mapping
-          - initial_etcd_alarms.json.alarms | default([]) | length == 0
+          - initial_etcd_alarms.stdout | from_json is mapping
+          - >-
+            (initial_etcd_alarms.stdout | from_json).alarms
+            | default([])
+            | length == 0
         fail_msg: >-
           etcd tiene alarmas activas:
-          {{ initial_etcd_alarms.json.alarms | default([]) }}.
+          {{ (initial_etcd_alarms.stdout | from_json).alarms | default([]) }}.
 
     - name: Comprobar que todos los nodos están Ready antes de empezar
       ansible.builtin.command:
@@ -1521,23 +1539,25 @@
       changed_when: false
 
     - name: Comprobar cada miembro etcd antes de mantener el nodo
-      ansible.builtin.uri:
-        url: "{{ etcd_health_url }}"
-        method: GET
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - endpoint
+          - health
       delegate_to: "{{ item }}"
       loop: "{{ groups['server'] }}"
       register: etcd_health_before_node
+      changed_when: false
 
     - name: Exigir quorum sano en cada miembro antes del drain
       ansible.builtin.assert:
         that:
-          - item.json.health | string | lower == 'true'
+          - (item.stdout | from_json | first).health | bool
         fail_msg: >-
           El miembro etcd de {{ item.item }} no puede confirmar salud/quorum:
           {{ item.content | default(item.msg | default('sin respuesta')) }}.
@@ -1568,69 +1588,68 @@
         label: "{{ item.item }}"
 
     - name: Consultar alarmas etcd antes del drain
-      ansible.builtin.uri:
-        url: "{{ etcd_alarm_url }}"
-        method: POST
-        body_format: json
-        body: {}
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - alarm
+          - list
       delegate_to: "{{ maintenance_kubectl_host }}"
       register: etcd_alarms_before_node
+      changed_when: false
 
     - name: Consultar membership etcd antes del drain
-      ansible.builtin.uri:
-        url: "{{ etcd_members_url }}"
-        method: POST
-        body_format: json
-        body:
-          linearizable: true
-        ca_path: "{{ etcd_ca_path }}"
-        client_cert: "{{ etcd_client_cert_path }}"
-        client_key: "{{ etcd_client_key_path }}"
-        return_content: true
-        status_code: 200
-        timeout: 30
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/etcdctl
+          - --endpoints=https://127.0.0.1:2379
+          - "--cacert={{ etcd_ca_path }}"
+          - "--cert={{ etcd_client_cert_path }}"
+          - "--key={{ etcd_client_key_path }}"
+          - --write-out=json
+          - member
+          - list
       delegate_to: "{{ maintenance_kubectl_host }}"
       register: etcd_members_before_node
+      changed_when: false
 
     - name: Exigir exactamente los voters etcd antes del drain
       ansible.builtin.assert:
         that:
-          - etcd_members_before_node.json is mapping
+          - etcd_members_before_node.stdout | from_json is mapping
           - >-
             (
-              etcd_members_before_node.json.members
+              (etcd_members_before_node.stdout | from_json).members
               | default([])
               | length
             ) == (groups['server'] | length)
           - >-
             (
-              etcd_members_before_node.json.members
+              (etcd_members_before_node.stdout | from_json).members
               | default([])
               | map(attribute='name')
               | sort
               | list
             ) == (expected_etcd_member_names | sort)
           - >-
-            etcd_members_before_node.json.members
+            (etcd_members_before_node.stdout | from_json).members
             | default([])
             | selectattr('isLearner', 'defined')
             | selectattr('isLearner')
             | list
             | length == 0
           - >-
-            etcd_members_before_node.json.members
+            (etcd_members_before_node.stdout | from_json).members
             | default([])
             | selectattr('clientURLs', 'undefined')
             | list
             | length == 0
           - >-
-            etcd_members_before_node.json.members
+            (etcd_members_before_node.stdout | from_json).members
             | default([])
             | selectattr('clientURLs', 'defined')
             | selectattr('clientURLs', 'equalto', [])
@@ -1640,16 +1659,19 @@
           El membership etcd no coincide exactamente con
           {{ expected_etcd_member_names }} o contiene miembros sin
           iniciar/learners:
-          {{ etcd_members_before_node.json.members | default([]) }}.
+          {{ (etcd_members_before_node.stdout | from_json).members | default([]) }}.
 
     - name: Exigir que etcd no tenga alarmas antes del drain
       ansible.builtin.assert:
         that:
-          - etcd_alarms_before_node.json is mapping
-          - etcd_alarms_before_node.json.alarms | default([]) | length == 0
+          - etcd_alarms_before_node.stdout | from_json is mapping
+          - >-
+            (etcd_alarms_before_node.stdout | from_json).alarms
+            | default([])
+            | length == 0
         fail_msg: >-
           etcd tiene alarmas activas:
-          {{ etcd_alarms_before_node.json.alarms | default([]) }}.
+          {{ (etcd_alarms_before_node.stdout | from_json).alarms | default([]) }}.
 
     - name: Listar deployments antes del mantenimiento
       ansible.builtin.command:
@@ -1682,7 +1704,7 @@
           - "{{ item.metadata.namespace }}"
           - "--timeout={{ workload_ready_timeout }}"
       delegate_to: "{{ maintenance_kubectl_host }}"
-      loop: "{{ (deployments_before_maintenance.stdout | from_json).items }}"
+      loop: "{{ (deployments_before_maintenance.stdout | from_json)['items'] }}"
       loop_control:
         label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
       changed_when: false
@@ -1718,7 +1740,7 @@
           - "{{ item.metadata.namespace }}"
           - "--timeout={{ workload_ready_timeout }}"
       delegate_to: "{{ maintenance_kubectl_host }}"
-      loop: "{{ (statefulsets_before_maintenance.stdout | from_json).items }}"
+      loop: "{{ (statefulsets_before_maintenance.stdout | from_json)['items'] }}"
       loop_control:
         label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
       changed_when: false
@@ -1808,7 +1830,7 @@
       ansible.builtin.set_fact:
         other_unschedulable_nodes: >-
           {{ other_unschedulable_nodes + [item.metadata.name] }}
-      loop: "{{ (all_nodes_before_drain.stdout | from_json).items }}"
+      loop: "{{ (all_nodes_before_drain.stdout | from_json)['items'] }}"
       loop_control:
         label: "{{ item.metadata.name }}"
       when:
@@ -2141,7 +2163,7 @@
               - "{{ item.metadata.namespace }}"
               - "--timeout={{ workload_ready_timeout }}"
           delegate_to: "{{ maintenance_kubectl_host }}"
-          loop: "{{ (deployments_after_drain.stdout | from_json).items }}"
+          loop: "{{ (deployments_after_drain.stdout | from_json)['items'] }}"
           loop_control:
             label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
           changed_when: false
@@ -2177,21 +2199,22 @@
               - "{{ item.metadata.namespace }}"
               - "--timeout={{ workload_ready_timeout }}"
           delegate_to: "{{ maintenance_kubectl_host }}"
-          loop: "{{ (statefulsets_after_drain.stdout | from_json).items }}"
+          loop: "{{ (statefulsets_after_drain.stdout | from_json)['items'] }}"
           loop_control:
             label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
           changed_when: false
 
         - name: Revalidar etcd justo antes de detener un server
-          ansible.builtin.uri:
-            url: "{{ etcd_health_url }}"
-            method: GET
-            ca_path: "{{ etcd_ca_path }}"
-            client_cert: "{{ etcd_client_cert_path }}"
-            client_key: "{{ etcd_client_key_path }}"
-            return_content: true
-            status_code: 200
-            timeout: 30
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/etcdctl
+              - --endpoints=https://127.0.0.1:2379
+              - "--cacert={{ etcd_ca_path }}"
+              - "--cert={{ etcd_client_cert_path }}"
+              - "--key={{ etcd_client_key_path }}"
+              - --write-out=json
+              - endpoint
+              - health
           delegate_to: "{{ item }}"
           loop: >-
             {{
@@ -2200,12 +2223,13 @@
               | list
             }}
           register: etcd_health_immediately_before_stop
+          changed_when: false
           when: inventory_hostname in groups['server']
 
         - name: Exigir que los demás voters sostengan la parada
           ansible.builtin.assert:
             that:
-              - item.json.health | string | lower == 'true'
+              - (item.stdout | from_json | first).health | bool
             fail_msg: >-
               No se detendrá K3s en {{ inventory_hostname }}: el voter
               {{ item.item }} ya no confirma quorum.
@@ -2415,15 +2439,16 @@
           when: pre_release_reboot.stat.exists
 
         - name: Revalidar etcd antes de volver a detener un server
-          ansible.builtin.uri:
-            url: "{{ etcd_health_url }}"
-            method: GET
-            ca_path: "{{ etcd_ca_path }}"
-            client_cert: "{{ etcd_client_cert_path }}"
-            client_key: "{{ etcd_client_key_path }}"
-            return_content: true
-            status_code: 200
-            timeout: 30
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/etcdctl
+              - --endpoints=https://127.0.0.1:2379
+              - "--cacert={{ etcd_ca_path }}"
+              - "--cert={{ etcd_client_cert_path }}"
+              - "--key={{ etcd_client_key_path }}"
+              - --write-out=json
+              - endpoint
+              - health
           delegate_to: "{{ item }}"
           loop: >-
             {{
@@ -2432,6 +2457,7 @@
               | list
             }}
           register: etcd_health_before_intermediate_stop
+          changed_when: false
           when:
             - pre_release_reboot.stat.exists
             - inventory_hostname in groups['server']
@@ -2439,7 +2465,7 @@
         - name: Exigir quorum antes de repetir la parada del server
           ansible.builtin.assert:
             that:
-              - item.json.health | string | lower == 'true'
+              - (item.stdout | from_json | first).health | bool
             fail_msg: >-
               K3s seguirá arrancado en {{ inventory_hostname }}: el voter
               {{ item.item }} ya no confirma quorum después del reboot.
@@ -2563,13 +2589,23 @@
             that:
               - ubuntu_release_check.rc in [0, 1]
               - >-
-                'new release' in
+                (
+                  (
+                    ubuntu_release_check.stdout
+                    ~ ' '
+                    ~ ubuntu_release_check.stderr
+                  )
+                  | regex_search(
+                      '(?im)^new release .+ available\\.?$'
+                    )
+                ) is not none
+                or 'no new release' in
                 (
                   ubuntu_release_check.stdout
                   ~ ' '
                   ~ ubuntu_release_check.stderr
                 ) | lower
-                or 'no new release' in
+                or 'no development version of an lts available' in
                 (
                   ubuntu_release_check.stdout
                   ~ ' '
@@ -2587,18 +2623,16 @@
           ansible.builtin.set_fact:
             ubuntu_release_available: >-
               {{
-                'new release' in
                 (
-                  ubuntu_release_check.stdout
-                  ~ ' '
-                  ~ ubuntu_release_check.stderr
-                ) | lower
-                and 'no new release' not in
-                (
-                  ubuntu_release_check.stdout
-                  ~ ' '
-                  ~ ubuntu_release_check.stderr
-                ) | lower
+                  (
+                    ubuntu_release_check.stdout
+                    ~ ' '
+                    ~ ubuntu_release_check.stderr
+                  )
+                  | regex_search(
+                      '(?im)^new release .+ available\\.?$'
+                    )
+                ) is not none
               }}
           when:
             - release_upgrade | bool
@@ -3244,23 +3278,25 @@
           changed_when: false
 
         - name: Comprobar cada miembro etcd tras recuperar el nodo
-          ansible.builtin.uri:
-            url: "{{ etcd_health_url }}"
-            method: GET
-            ca_path: "{{ etcd_ca_path }}"
-            client_cert: "{{ etcd_client_cert_path }}"
-            client_key: "{{ etcd_client_key_path }}"
-            return_content: true
-            status_code: 200
-            timeout: 30
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/etcdctl
+              - --endpoints=https://127.0.0.1:2379
+              - "--cacert={{ etcd_ca_path }}"
+              - "--cert={{ etcd_client_cert_path }}"
+              - "--key={{ etcd_client_key_path }}"
+              - --write-out=json
+              - endpoint
+              - health
           delegate_to: "{{ item }}"
           loop: "{{ groups['server'] }}"
           register: etcd_health_after_node
+          changed_when: false
 
         - name: Exigir quorum sano antes del uncordon
           ansible.builtin.assert:
             that:
-              - item.json.health | string | lower == 'true'
+              - (item.stdout | from_json | first).health | bool
             fail_msg: >-
               El miembro etcd de {{ item.item }} no puede confirmar
               salud/quorum tras recuperar {{ inventory_hostname }}:
@@ -3270,69 +3306,68 @@
             label: "{{ item.item }}"
 
         - name: Consultar alarmas etcd antes del uncordon
-          ansible.builtin.uri:
-            url: "{{ etcd_alarm_url }}"
-            method: POST
-            body_format: json
-            body: {}
-            ca_path: "{{ etcd_ca_path }}"
-            client_cert: "{{ etcd_client_cert_path }}"
-            client_key: "{{ etcd_client_key_path }}"
-            return_content: true
-            status_code: 200
-            timeout: 30
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/etcdctl
+              - --endpoints=https://127.0.0.1:2379
+              - "--cacert={{ etcd_ca_path }}"
+              - "--cert={{ etcd_client_cert_path }}"
+              - "--key={{ etcd_client_key_path }}"
+              - --write-out=json
+              - alarm
+              - list
           delegate_to: "{{ maintenance_kubectl_host }}"
           register: etcd_alarms_after_node
+          changed_when: false
 
         - name: Consultar membership etcd antes del uncordon
-          ansible.builtin.uri:
-            url: "{{ etcd_members_url }}"
-            method: POST
-            body_format: json
-            body:
-              linearizable: true
-            ca_path: "{{ etcd_ca_path }}"
-            client_cert: "{{ etcd_client_cert_path }}"
-            client_key: "{{ etcd_client_key_path }}"
-            return_content: true
-            status_code: 200
-            timeout: 30
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/etcdctl
+              - --endpoints=https://127.0.0.1:2379
+              - "--cacert={{ etcd_ca_path }}"
+              - "--cert={{ etcd_client_cert_path }}"
+              - "--key={{ etcd_client_key_path }}"
+              - --write-out=json
+              - member
+              - list
           delegate_to: "{{ maintenance_kubectl_host }}"
           register: etcd_members_after_node
+          changed_when: false
 
         - name: Exigir exactamente los voters etcd antes del uncordon
           ansible.builtin.assert:
             that:
-              - etcd_members_after_node.json is mapping
+              - etcd_members_after_node.stdout | from_json is mapping
               - >-
                 (
-                  etcd_members_after_node.json.members
+                  (etcd_members_after_node.stdout | from_json).members
                   | default([])
                   | length
                 ) == (groups['server'] | length)
               - >-
                 (
-                  etcd_members_after_node.json.members
+                  (etcd_members_after_node.stdout | from_json).members
                   | default([])
                   | map(attribute='name')
                   | sort
                   | list
                 ) == (expected_etcd_member_names | sort)
               - >-
-                etcd_members_after_node.json.members
+                (etcd_members_after_node.stdout | from_json).members
                 | default([])
                 | selectattr('isLearner', 'defined')
                 | selectattr('isLearner')
                 | list
                 | length == 0
               - >-
-                etcd_members_after_node.json.members
+                (etcd_members_after_node.stdout | from_json).members
                 | default([])
                 | selectattr('clientURLs', 'undefined')
                 | list
                 | length == 0
               - >-
-                etcd_members_after_node.json.members
+                (etcd_members_after_node.stdout | from_json).members
                 | default([])
                 | selectattr('clientURLs', 'defined')
                 | selectattr('clientURLs', 'equalto', [])
@@ -3342,16 +3377,19 @@
               El membership etcd no coincide exactamente con
               {{ expected_etcd_member_names }} o contiene miembros sin
               iniciar/learners:
-              {{ etcd_members_after_node.json.members | default([]) }}.
+              {{ (etcd_members_after_node.stdout | from_json).members | default([]) }}.
 
         - name: Exigir que etcd no tenga alarmas antes del uncordon
           ansible.builtin.assert:
             that:
-              - etcd_alarms_after_node.json is mapping
-              - etcd_alarms_after_node.json.alarms | default([]) | length == 0
+              - etcd_alarms_after_node.stdout | from_json is mapping
+              - >-
+                (etcd_alarms_after_node.stdout | from_json).alarms
+                | default([])
+                | length == 0
             fail_msg: >-
               etcd tiene alarmas activas:
-              {{ etcd_alarms_after_node.json.alarms | default([]) }}.
+              {{ (etcd_alarms_after_node.stdout | from_json).alarms | default([]) }}.
 
         - name: Volver a habilitar planificación en el nodo
           ansible.builtin.command:
@@ -3420,7 +3458,7 @@
               - "{{ item.metadata.namespace }}"
               - "--timeout={{ workload_ready_timeout }}"
           delegate_to: "{{ maintenance_kubectl_host }}"
-          loop: "{{ (deployments_after_maintenance.stdout | from_json).items }}"
+          loop: "{{ (deployments_after_maintenance.stdout | from_json)['items'] }}"
           loop_control:
             label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
           changed_when: false
@@ -3456,7 +3494,7 @@
               - "{{ item.metadata.namespace }}"
               - "--timeout={{ workload_ready_timeout }}"
           delegate_to: "{{ maintenance_kubectl_host }}"
-          loop: "{{ (statefulsets_after_maintenance.stdout | from_json).items }}"
+          loop: "{{ (statefulsets_after_maintenance.stdout | from_json)['items'] }}"
           loop_control:
             label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
           changed_when: false
