@@ -197,6 +197,24 @@
       delegate_to: "{{ maintenance_kubectl_host }}"
       changed_when: false
 
+    - name: Inicializar el mapa de nodos Kubernetes al inventario
+      ansible.builtin.set_fact:
+        maintenance_kubernetes_to_inventory: {}
+
+    - name: Construir el mapa de nodos Kubernetes al inventario
+      ansible.builtin.set_fact:
+        maintenance_kubernetes_to_inventory: >-
+          {{
+            maintenance_kubernetes_to_inventory
+            | combine({
+                hostvars[item].kubernetes_node_name | default(item): item
+              })
+          }}
+      loop: "{{ groups['k3s_maintenance_targets'] }}"
+      loop_control:
+        label: >-
+          {{ item }} -> {{ hostvars[item].kubernetes_node_name | default(item) }}
+
     - name: Inicializar listas de cordons
       ansible.builtin.set_fact:
         maintenance_unschedulable_nodes: []
@@ -205,7 +223,15 @@
     - name: Recopilar nodos no planificables
       ansible.builtin.set_fact:
         maintenance_unschedulable_nodes: >-
-          {{ maintenance_unschedulable_nodes + [item.metadata.name] }}
+          {{
+            maintenance_unschedulable_nodes
+            + [
+                maintenance_kubernetes_to_inventory.get(
+                  item.metadata.name,
+                  item.metadata.name
+                )
+              ]
+          }}
       loop: "{{ (maintenance_nodes_query.stdout | from_json)['items'] }}"
       loop_control:
         label: "{{ item.metadata.name }}"
@@ -214,7 +240,15 @@
     - name: Recopilar nodos anotados por este playbook
       ansible.builtin.set_fact:
         maintenance_owned_nodes: >-
-          {{ maintenance_owned_nodes + [item.metadata.name] }}
+          {{
+            maintenance_owned_nodes
+            + [
+                maintenance_kubernetes_to_inventory.get(
+                  item.metadata.name,
+                  item.metadata.name
+                )
+              ]
+          }}
       loop: "{{ (maintenance_nodes_query.stdout | from_json)['items'] }}"
       loop_control:
         label: "{{ item.metadata.name }}"
@@ -501,7 +535,8 @@
   vars:
     k3s_binary: /usr/local/bin/k3s
     k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
-    k3s_node_name: "{{ inventory_hostname }}"
+    k3s_node_name: >-
+      {{ kubernetes_node_name | default(inventory_hostname) }}
     maintenance_state_host: localhost
     maintenance_controller_candidates: >-
       {{
@@ -1210,7 +1245,8 @@
 
     k3s_binary: /usr/local/bin/k3s
     k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
-    k3s_node_name: "{{ inventory_hostname }}"
+    k3s_node_name: >-
+      {{ kubernetes_node_name | default(inventory_hostname) }}
     maintenance_annotation: isma.dev/ansible-os-maintenance
     maintenance_annotation_value: rolling-update
     maintenance_state_host: localhost
@@ -1227,6 +1263,18 @@
     node_ready_timeout: 30m
     workload_ready_timeout: 20m
     cluster_settle_seconds: 30
+    # Los PVC local-path no pueden moverse mientras su nodo está drenado.
+    # Se validan antes del drain y otra vez después del uncordon.
+    maintenance_local_workloads:
+      v3:
+        deployments:
+          - monitoring/monitoring-grafana
+      v7:
+        statefulsets:
+          - >-
+            monitoring/alertmanager-monitoring-kube-prometheus-alertmanager
+          - >-
+            monitoring/prometheus-monitoring-kube-prometheus-prometheus
 
     apt_lock_timeout_seconds: 7200
     package_operation_timeout_seconds: 21600
@@ -2167,6 +2215,16 @@
           loop_control:
             label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
           changed_when: false
+          when: >-
+            (
+              item.metadata.namespace
+              ~ '/'
+              ~ item.metadata.name
+            ) not in (
+              maintenance_local_workloads
+              .get(k3s_node_name, {})
+              .get('deployments', [])
+            )
 
         - name: Listar StatefulSets tras el drain
           ansible.builtin.command:
@@ -2203,6 +2261,16 @@
           loop_control:
             label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
           changed_when: false
+          when: >-
+            (
+              item.metadata.namespace
+              ~ '/'
+              ~ item.metadata.name
+            ) not in (
+              maintenance_local_workloads
+              .get(k3s_node_name, {})
+              .get('statefulsets', [])
+            )
 
         - name: Revalidar etcd justo antes de detener un server
           ansible.builtin.command:
