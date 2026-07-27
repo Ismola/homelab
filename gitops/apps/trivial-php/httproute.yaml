@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: trivial-php
+  namespace: trivial-php
+spec:
+  parentRefs:
+    - name: traefik
+      namespace: gateway-system
+  hostnames:
+    - "trivial-php.ismola.dev"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: trivial-php
+          port: 80

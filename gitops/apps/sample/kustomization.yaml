@@ -5,7 +5,7 @@
 #   - namespace.yaml
 #   - deployment.yaml
 #   - service.yaml
-#   - ingress.yaml
+#   - httproute.yaml
 #   - limitrange.yaml
 
 # images:

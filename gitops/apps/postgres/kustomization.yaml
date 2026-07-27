@@ -10,5 +10,5 @@ resources:
   - statefulset.yaml
   - exporter.yaml
   - pgadmin.yaml
-  - pgadmin-ingress-cloudflare.yaml
+  - pgadmin-httproute.yaml
   - pgadmin-ingress-tailscale.yaml

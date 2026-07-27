@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: apple-concept
+  namespace: apple-concept
+spec:
+  parentRefs:
+    - name: traefik
+      namespace: gateway-system
+  hostnames:
+    - "apple-concept.ismola.dev"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: apple-concept
+          port: 80

@@ -9,7 +9,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress-tailscale.yaml
-  - ingress-cloudflare.yaml
+  - httproute.yaml
 
 images:
   - name: ghcr.io/headlamp-k8s/headlamp

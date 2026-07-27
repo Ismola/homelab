@@ -6,13 +6,11 @@ metadata:
     tailscale.com/proxy-class: stable-proxies
 spec:
   ingressClassName: tailscale
-
   defaultBackend:
     service:
       name: headlamp
       port:
         number: 80
-
   tls:
     - hosts:
         - headlamp

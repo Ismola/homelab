@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sj-wedding
+  namespace: sj-wedding
+spec:
+  parentRefs:
+    - name: traefik
+      namespace: gateway-system
+  hostnames:
+    - "sj-wedding.ismola.dev"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: sj-wedding
+          port: 80

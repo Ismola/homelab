@@ -10,5 +10,5 @@ resources:
   - statefulset.yaml
   - exporter.yaml
   - mongo-express.yaml
-  - mongo-express-ingress-cloudflare.yaml
+  - mongo-express-httproute.yaml
   - mongo-express-ingress-tailscale.yaml

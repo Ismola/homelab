@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: african-art-exhibition-concept
+  namespace: african-art-exhibition-concept
+spec:
+  parentRefs:
+    - name: traefik
+      namespace: gateway-system
+  hostnames:
+    - "african-art-exhibition-concept.ismola.dev"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: african-art-exhibition-concept
+          port: 80

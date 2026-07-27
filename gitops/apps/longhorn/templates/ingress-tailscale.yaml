@@ -7,13 +7,11 @@ metadata:
     tailscale.com/proxy-class: stable-proxies
 spec:
   ingressClassName: tailscale
-
   defaultBackend:
     service:
       name: longhorn-frontend
       port:
         number: 80
-
   tls:
     - hosts:
         - longhorn
