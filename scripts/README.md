@@ -24,6 +24,10 @@ de los hosts `server` y `agent` con los objetos Node de Kubernetes.
 - Elimina labels de tags que ya no estén en el inventario.
 - La tag `longhorn` también controla
   `node.longhorn.io/create-default-disk`.
+- Las cargas estables seleccionan `tags.isma.dev/stable=true`.
+- Elimina los antiguos `isma.dev/stable` e `isma.dev/longhorn`, pero conserva
+  los labels de inventario `isma.dev/provider`, `isma.dev/cpu` y
+  `isma.dev/ram-gb`.
 - Usa `kubectl` o, si no existe, `k3s kubectl`.
 - Sin `--apply` sólo muestra los comandos que ejecutaría.
 

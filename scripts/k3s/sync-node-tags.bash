@@ -171,6 +171,12 @@ for inventory_node in "${inventory_nodes[@]}"; do
     run_kubectl label node "${node}" \
       node.longhorn.io/create-default-disk=false --overwrite
   fi
+
+  # Limpieza de los dos labels anteriores a este sistema de tags. No se
+  # eliminan otros labels isma.dev/* como provider, cpu o ram-gb.
+  run_kubectl label node "${node}" \
+    isma.dev/stable- \
+    isma.dev/longhorn-
 done
 
 if [[ "${apply}" == false ]]; then

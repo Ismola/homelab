@@ -25,7 +25,7 @@ spec:
       automountServiceAccountToken: true
 
       nodeSelector:
-        isma.dev/stable: "true"
+        tags.isma.dev/stable: "true"
 
       containers:
         - name: headlamp

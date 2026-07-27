@@ -3,7 +3,7 @@ kubectl cordon node
 kubectl drain node \
   --ignore-daemonsets \
   --delete-emptydir-data \
-  --disable-eviction \
+  # --disable-eviction \
   --force \
   --timeout=5m
 
