@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-tailnet
+  annotations:
+    tailscale.com/hostname: mongodb-db
+    tailscale.com/proxy-class: stable-proxies
+  labels:
+    app.kubernetes.io/name: mongodb
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    app.kubernetes.io/name: mongodb
+  ports:
+    - name: mongodb
+      protocol: TCP
+      port: 27017
+      targetPort: mongodb
