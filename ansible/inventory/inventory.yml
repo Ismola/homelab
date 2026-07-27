@@ -16,7 +16,8 @@ k3s_cluster:
           ansible_host: v3.elver-chicken.ts.net
           ts_ip: "100.105.109.20"
           provider: oracle
-          longhorn_storage: true
+          tags:
+            - longhorn
           ram_gb: 24
           cpu: 4
           arch: arm64
@@ -26,7 +27,8 @@ k3s_cluster:
           ansible_host: v7.elver-chicken.ts.net
           ts_ip: "100.117.67.57"
           provider: oracle
-          longhorn_storage: true
+          tags:
+            - longhorn
           ram_gb: 12
           cpu: 2
           arch: amd64
@@ -36,6 +38,7 @@ k3s_cluster:
           ansible_host: rpi.elver-chicken.ts.net
           ts_ip: "100.80.157.10"
           provider: homelab
+          tags: []
           ram_gb: 2
           cpu: 4
           arch: arm64
@@ -47,6 +50,7 @@ k3s_cluster:
           ansible_host: v1.elver-chicken.ts.net
           ts_ip: "100.98.234.107"
           provider: oracle
+          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
@@ -56,6 +60,7 @@ k3s_cluster:
           ansible_host: v2.elver-chicken.ts.net
           ts_ip: "100.115.97.88"
           provider: oracle
+          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
@@ -65,6 +70,7 @@ k3s_cluster:
           ansible_host: v4.elver-chicken.ts.net
           ts_ip: "100.91.216.33"
           provider: google
+          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
@@ -74,6 +80,7 @@ k3s_cluster:
           ansible_host: v5.elver-chicken.ts.net
           ts_ip: "100.111.119.77"
           provider: oracle
+          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
@@ -83,6 +90,7 @@ k3s_cluster:
           ansible_host: v6.elver-chicken.ts.net
           ts_ip: "100.90.63.53"
           provider: oracle
+          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
@@ -114,8 +122,6 @@ k3s_cluster:
       --node-label=isma.dev/provider={{ provider }}
       --node-label=isma.dev/ram-gb={{ ram_gb }}
       --node-label=isma.dev/cpu={{ cpu }}
-      --node-label=isma.dev/longhorn={{ longhorn_storage | default(false) | string | lower }}
-      --node-label=node.longhorn.io/create-default-disk={{ longhorn_storage | default(false) | string | lower }}
 
     extra_agent_args: >-
       --prefer-bundled-bin
@@ -124,8 +130,6 @@ k3s_cluster:
       --node-label=isma.dev/provider={{ provider }}
       --node-label=isma.dev/ram-gb={{ ram_gb }}
       --node-label=isma.dev/cpu={{ cpu }}
-      --node-label=isma.dev/longhorn={{ longhorn_storage | default(false) | string | lower }}
-      --node-label=node.longhorn.io/create-default-disk={{ longhorn_storage | default(false) | string | lower }}
 
     user_kubectl: true
 
