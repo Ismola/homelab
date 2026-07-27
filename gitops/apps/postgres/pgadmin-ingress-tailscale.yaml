@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pgadmin-tailnet
+  annotations:
+    tailscale.com/proxy-class: stable-proxies
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: pgadmin
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - pgadmin

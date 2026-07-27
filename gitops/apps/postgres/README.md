@@ -41,3 +41,27 @@ psql 'postgresql://developer:CAMBIA_ESTA_PASSWORD@postgres-db:5432/development'
 ```
 
 El servicio de Tailscale es privado; no se crea ningún Ingress de Cloudflare.
+
+## pgAdmin
+
+La interfaz está publicada mediante los mismos dos mecanismos que el resto de
+servicios:
+
+- Tailscale: `https://pgadmin.elver-chicken.ts.net`
+- Cloudflare/Traefik: `https://pgadmin.ismola.dev`
+
+Sus credenciales viven en el Secret `pgadmin-auth` y no se guardan en Git:
+
+```bash
+k3s kubectl -n postgres get secret pgadmin-auth \
+  -o go-template='email: {{index .data "email" | base64decode}}{{"\n"}}password: {{index .data "password" | base64decode}}{{"\n"}}'
+```
+
+Para registrar PostgreSQL en pgAdmin usa `postgres` como servidor, `5432` como
+puerto y las credenciales de `postgres-auth`.
+
+## Métricas
+
+`postgres-exporter` expone métricas únicamente dentro del clúster. El
+`ServiceMonitor` de la aplicación de monitoring las incorpora a Prometheus y
+Grafana carga el dashboard **PostgreSQL Database**.

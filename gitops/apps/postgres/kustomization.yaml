@@ -8,3 +8,7 @@ resources:
   - service.yaml
   - service-tailscale.yaml
   - statefulset.yaml
+  - exporter.yaml
+  - pgadmin.yaml
+  - pgadmin-ingress-cloudflare.yaml
+  - pgadmin-ingress-tailscale.yaml

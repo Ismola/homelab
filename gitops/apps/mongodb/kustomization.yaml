@@ -8,3 +8,7 @@ resources:
   - service.yaml
   - service-tailscale.yaml
   - statefulset.yaml
+  - exporter.yaml
+  - mongo-express.yaml
+  - mongo-express-ingress-cloudflare.yaml
+  - mongo-express-ingress-tailscale.yaml

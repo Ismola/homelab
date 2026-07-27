@@ -74,6 +74,21 @@ kube-prometheus-stack:
           cpu: 100m
           memory: 128Mi
 
+    dashboards:
+      default:
+        longhorn:
+          gnetId: 17626
+          revision: 1
+          datasource: Prometheus
+        postgresql:
+          gnetId: 9628
+          revision: 8
+          datasource: Prometheus
+        mongodb:
+          gnetId: 12079
+          revision: 1
+          datasource: Prometheus
+
   prometheus:
     enabled: true
 

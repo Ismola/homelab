@@ -40,3 +40,24 @@ mongosh 'mongodb://developer:CAMBIA_ESTA_PASSWORD@mongodb-db:27017/?authSource=a
 ```
 
 El servicio de Tailscale es privado; no se crea ningún Ingress de Cloudflare.
+
+## mongo-express
+
+La interfaz está publicada mediante los mismos dos mecanismos que el resto de
+servicios:
+
+- Tailscale: `https://mongo-express.elver-chicken.ts.net`
+- Cloudflare/Traefik: `https://mongo-express.ismola.dev`
+
+La interfaz no solicita autenticación HTTP. Ten en cuenta que esto también se
+aplica al acceso publicado mediante Cloudflare.
+
+La URI que usa la interfaz se almacena por separado en el Secret
+`mongo-express-connection`, para no incluir la contraseña de MongoDB en los
+manifiestos.
+
+## Métricas
+
+`mongodb-exporter` expone métricas únicamente dentro del clúster. El
+`ServiceMonitor` de la aplicación de monitoring las incorpora a Prometheus y
+Grafana carga el dashboard **MongoDB**.
