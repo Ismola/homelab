@@ -1,0 +1,47 @@
+longhorn:
+  global:
+    nodeSelector:
+      isma.dev/longhorn: "true"
+
+  # No sustituye local-path como StorageClass por defecto. Los StatefulSet
+  # deben seleccionar "longhorn" explícitamente.
+  persistence:
+    defaultClass: false
+    defaultClassReplicaCount: 2
+    reclaimPolicy: Retain
+    volumeBindingMode: WaitForFirstConsumer
+    dataEngine: v1
+
+  # Longhorn sólo crea discos y componentes en v3/v7, los nodos marcados
+  # desde el inventario de Ansible. rpi y los agents de 1 GiB quedan fuera.
+  defaultSettings:
+    createDefaultDiskLabeledNodes: true
+    defaultDataPath: /var/lib/longhorn
+    defaultReplicaCount: '{"v1":"2"}'
+    replicaSoftAntiAffinity: false
+    replicaDiskSoftAntiAffinity: false
+    systemManagedComponentsNodeSelector: "isma.dev/longhorn:true"
+    storageOverProvisioningPercentage: 100
+    storageMinimalAvailablePercentage: 25
+    storageReservedPercentageForDefaultDisk: 20
+    disableSchedulingOnCordonedNode: true
+    upgradeChecker: false
+    allowCollectingLonghornUsageMetrics: false
+    v1DataEngine: true
+    v2DataEngine: false
+
+  # El job de pre-upgrade usa hooks de Helm que no encajan con la
+  # reconciliación declarativa de Argo CD.
+  preUpgradeChecker:
+    jobEnabled: false
+    upgradeVersionCheck: false
+
+  longhornUI:
+    replicas: 2
+
+  service:
+    ui:
+      type: ClusterIP
+
+  ingress:
+    enabled: false

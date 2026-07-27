@@ -1,0 +1,10 @@
+apiVersion: v2
+name: longhorn-stack
+description: Longhorn para el almacenamiento persistente del clúster
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: longhorn
+    version: 1.12.0
+    repository: https://charts.longhorn.io

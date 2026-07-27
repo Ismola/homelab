@@ -16,6 +16,7 @@ k3s_cluster:
           ansible_host: v3.elver-chicken.ts.net
           ts_ip: "100.105.109.20"
           provider: oracle
+          longhorn_storage: true
           ram_gb: 24
           cpu: 4
           arch: arm64
@@ -25,6 +26,7 @@ k3s_cluster:
           ansible_host: v7.elver-chicken.ts.net
           ts_ip: "100.117.67.57"
           provider: oracle
+          longhorn_storage: true
           ram_gb: 12
           cpu: 2
           arch: amd64
@@ -112,6 +114,8 @@ k3s_cluster:
       --node-label=isma.dev/provider={{ provider }}
       --node-label=isma.dev/ram-gb={{ ram_gb }}
       --node-label=isma.dev/cpu={{ cpu }}
+      --node-label=isma.dev/longhorn={{ longhorn_storage | default(false) | string | lower }}
+      --node-label=node.longhorn.io/create-default-disk={{ longhorn_storage | default(false) | string | lower }}
 
     extra_agent_args: >-
       --prefer-bundled-bin
@@ -120,6 +124,8 @@ k3s_cluster:
       --node-label=isma.dev/provider={{ provider }}
       --node-label=isma.dev/ram-gb={{ ram_gb }}
       --node-label=isma.dev/cpu={{ cpu }}
+      --node-label=isma.dev/longhorn={{ longhorn_storage | default(false) | string | lower }}
+      --node-label=node.longhorn.io/create-default-disk={{ longhorn_storage | default(false) | string | lower }}
 
     user_kubectl: true
 
