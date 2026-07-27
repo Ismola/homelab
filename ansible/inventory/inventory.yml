@@ -46,8 +46,8 @@ k3s_cluster:
 
     agent:
       hosts:
-        v1:
-          ansible_host: v1.elver-chicken.ts.net
+        instance-20240424-2202:
+          ansible_host: instance-20240424-2202.elver-chicken.ts.net
           ts_ip: "100.98.234.107"
           provider: oracle
           tags: []

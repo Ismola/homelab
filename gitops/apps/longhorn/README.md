@@ -16,8 +16,9 @@ tags:
   - longhorn
 ```
 
-El script descarga el inventario de la rama `main` de GitHub. Para
-previsualizar y aplicar sus tags en los objetos Node de Kubernetes:
+El script está pensado para ejecutarse en un nodo del clúster. Descarga el
+inventario de la rama `main` de GitHub y usa `kubectl` o, si no está instalado,
+`k3s kubectl`. Para previsualizar y aplicar sus tags:
 
 ```bash
 ./scripts/k3s/sync-node-tags.bash
@@ -26,7 +27,8 @@ previsualizar y aplicar sus tags en los objetos Node de Kubernetes:
 
 El script crea labels `tags.isma.dev/<tag>=true`, elimina los labels de tags
 que hayan desaparecido del inventario y sincroniza además
-`node.longhorn.io/create-default-disk`.
+`node.longhorn.io/create-default-disk`. Sólo necesita `curl` y las herramientas
+POSIX habituales del sistema; no requiere Ansible, `ansible-inventory` ni `jq`.
 
 Antes de quitar `longhorn` de un nodo que ya almacena datos, deshabilita su
 scheduling en la UI de Longhorn y espera a que todas sus réplicas hayan sido
