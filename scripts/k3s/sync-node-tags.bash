@@ -1,3 +1,8 @@
+# Para descargarlo y ejecutarlo aplicando las etiquetas:
+# curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-tags.bash | sudo bash -s -- --apply
+# Para previsualizar los cambios sin aplicarlos:
+# curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-tags.bash | sudo bash
+
 #!/usr/bin/env bash
 
 set -euo pipefail
