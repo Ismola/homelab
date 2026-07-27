@@ -7,20 +7,31 @@ del clúster. Argo CD descubre este directorio mediante `homelab-apps`.
 
 Sólo `v3` y `v7` almacenan datos y ejecutan componentes de Longhorn. Son los
 únicos nodos con memoria suficiente (24 GiB y 12 GiB); `rpi` (2 GiB) y los
-agents (1 GiB) quedan excluidos mediante `isma.dev/longhorn=false`.
+agents (1 GiB) no tienen la tag `longhorn`.
 
-El inventario deja persistentes los labels cuando K3s arranca. Para etiquetar
-los nodos ya existentes antes del primer sync:
+Las tags se declaran en `ansible/inventory/inventory.yml`:
+
+```yaml
+tags:
+  - longhorn
+```
+
+El script descarga el inventario de la rama `main` de GitHub. Para
+previsualizar y aplicar sus tags en los objetos Node de Kubernetes:
 
 ```bash
-kubectl label node v3 v7 \
-  isma.dev/longhorn=true \
-  node.longhorn.io/create-default-disk=true --overwrite
-
-kubectl label node rpi v1 v2 v4 v5 v6 \
-  isma.dev/longhorn=false \
-  node.longhorn.io/create-default-disk=false --overwrite
+./scripts/k3s/sync-node-tags.bash
+./scripts/k3s/sync-node-tags.bash --apply
 ```
+
+El script crea labels `tags.isma.dev/<tag>=true`, elimina los labels de tags
+que hayan desaparecido del inventario y sincroniza además
+`node.longhorn.io/create-default-disk`.
+
+Antes de quitar `longhorn` de un nodo que ya almacena datos, deshabilita su
+scheduling en la UI de Longhorn y espera a que todas sus réplicas hayan sido
+evacuadas. Quitar la tag controla dónde se ejecutan los componentes, pero no
+debe utilizarse como sustituto del drenado de datos.
 
 Antes del despliegue, `v3` y `v7` deben tener instalados `open-iscsi` y los
 binarios requeridos por Longhorn; `iscsid` debe estar activo. Compruébalo con
@@ -60,7 +71,7 @@ que monten estos PVC deben ejecutarse en uno de los nodos de almacenamiento:
 
 ```yaml
 nodeSelector:
-  isma.dev/longhorn: "true"
+  tags.isma.dev/longhorn: "true"
 ```
 
 ## UI
