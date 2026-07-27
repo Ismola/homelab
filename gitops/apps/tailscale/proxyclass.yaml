@@ -1,0 +1,17 @@
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: stable-proxies
+spec:
+  statefulSet:
+    pod:
+      nodeSelector:
+        tags.isma.dev/stable: "true"
+      tailscaleContainer:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
