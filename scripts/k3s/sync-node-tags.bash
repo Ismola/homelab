@@ -127,6 +127,11 @@ run_kubectl() {
   fi
 }
 
+longhorn_available=false
+if "${kubectl_command[@]}" get crd nodes.longhorn.io >/dev/null 2>&1; then
+  longhorn_available=true
+fi
+
 for inventory_node in "${inventory_nodes[@]}"; do
   node="${inventory_node%%|*}"
   tags_csv="${inventory_node#*|}"
@@ -167,9 +172,24 @@ for inventory_node in "${inventory_nodes[@]}"; do
   if printf '%s\n' "${desired_tags[@]}" | grep -Fxq longhorn; then
     run_kubectl label node "${node}" \
       node.longhorn.io/create-default-disk=true --overwrite
+    longhorn_allow_scheduling=true
   else
     run_kubectl label node "${node}" \
       node.longhorn.io/create-default-disk=false --overwrite
+    longhorn_allow_scheduling=false
+  fi
+
+  # Longhorn registra todos los nodos Kubernetes en su UI. Este campo controla
+  # cuáles pueden recibir discos y réplicas, aunque los demás sigan visibles.
+  if [[ "${longhorn_available}" == true ]]; then
+    if "${kubectl_command[@]}" -n longhorn get nodes.longhorn.io \
+      "${node}" >/dev/null 2>&1; then
+      run_kubectl -n longhorn patch nodes.longhorn.io "${node}" \
+        --type=merge \
+        -p "{\"spec\":{\"allowScheduling\":${longhorn_allow_scheduling}}}"
+    else
+      echo "Longhorn todavía no ha registrado el nodo ${node}; se omite allowScheduling" >&2
+    fi
   fi
 
   # Limpieza de los dos labels anteriores a este sistema de tags. No se
