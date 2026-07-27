@@ -1,8 +1,4 @@
 longhorn:
-  global:
-    nodeSelector:
-      tags.isma.dev/longhorn: "true"
-
   # No sustituye local-path como StorageClass por defecto. Los StatefulSet
   # deben seleccionar "longhorn" explícitamente.
   persistence:
@@ -12,15 +8,16 @@ longhorn:
     volumeBindingMode: WaitForFirstConsumer
     dataEngine: v1
 
-  # Longhorn sólo crea discos y componentes en v3/v7, los nodos marcados
-  # desde el inventario de Ansible. rpi y los agents de 1 GiB quedan fuera.
+  # Longhorn sólo crea discos en v3/v7, los nodos marcados desde el inventario
+  # de Ansible. Manager, CSI e instance-manager pueden ejecutarse en cualquier
+  # nodo para que los workloads monten volúmenes desde todo el clúster.
   defaultSettings:
     createDefaultDiskLabeledNodes: true
     defaultDataPath: /var/lib/longhorn
     defaultReplicaCount: '{"v1":"2"}'
     replicaSoftAntiAffinity: false
     replicaDiskSoftAntiAffinity: false
-    systemManagedComponentsNodeSelector: "tags.isma.dev/longhorn:true"
+    systemManagedComponentsNodeSelector: ""
     storageOverProvisioningPercentage: 100
     storageMinimalAvailablePercentage: 25
     storageReservedPercentageForDefaultDisk: 20
@@ -38,6 +35,12 @@ longhorn:
 
   longhornUI:
     replicas: 2
+    nodeSelector:
+      tags.isma.dev/stable: "true"
+
+  longhornDriver:
+    nodeSelector:
+      tags.isma.dev/stable: "true"
 
   service:
     ui:
