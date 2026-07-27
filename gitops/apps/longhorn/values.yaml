@@ -30,6 +30,11 @@ longhorn:
     v1DataEngine: true
     v2DataEngine: false
 
+  # Backup store NFS predeterminado. El espacio de "4 Archives" debe ir
+  # codificado como %20 para que el destino sea una URL válida.
+  defaultBackupStore:
+    backupTarget: "nfs://h0:/volume1/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4%20Archives/Backup/Longhorn"
+
   # El job de pre-upgrade usa hooks de Helm que no encajan con la
   # reconciliación declarativa de Argo CD.
   preUpgradeChecker:
