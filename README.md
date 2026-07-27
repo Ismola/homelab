@@ -30,6 +30,8 @@ flowchart TB
     tailnet(("Tailscale<br/>tailnet"))
     r2[("Cloudflare R2<br/>Object Storage")]
     workloads["Workloads K3s"]
+    longhorn[("Longhorn<br/>Persistent Volumes")]
+    databases[("PostgreSQL · MongoDB")]
 
     subgraph home["Homelab"]
         h0["h0 · NAS<br/>Docker workloads<br/>Pi-hole · NPM"]
@@ -54,6 +56,8 @@ flowchart TB
     servers -.-> workloads
     agents -.-> workloads
     homeNodes -.-> workloads
+    workloads --> databases
+    databases --> longhorn
     workloads -->|"API S3"| r2
 ```
 
@@ -63,12 +67,28 @@ Inventario: [`ansible/inventory/inventory.yml`](ansible/inventory/inventory.yml)
 
 ### Almacenamiento
 
-La infraestructura combina dos tipos de almacenamiento con responsabilidades distintas:
+La infraestructura combina tres tipos de almacenamiento con responsabilidades distintas:
 
 | Capa | Uso |
 | :--- | :--- |
-| `h0` | [Bases de datos](docker/database/compose.yml), [documentos](docker/opencloud/compose.yml), [imágenes](docker/immich/compose.yml), contenido local y copias alojadas en el NAS |
+| Longhorn en K3s | Volúmenes persistentes replicados para PostgreSQL, MongoDB y otras cargas con estado |
+| `h0` | [Documentos](docker/opencloud/compose.yml), [imágenes](docker/immich/compose.yml), contenido local y copias alojadas en el NAS |
 | Cloudflare R2 | Almacenamiento de objetos para las aplicaciones que necesitan una API compatible con S3 |
+
+### Longhorn
+
+Longhorn se ejecuta en K3s y se despliega mediante Argo CD desde
+[`gitops/apps/longhorn/`](gitops/apps/longhorn/). Usa los nodos `v3` y `v7`,
+mantiene dos réplicas por volumen y envía backups por CIFS a `h0`. La
+`StorageClass` `longhorn` se selecciona explícitamente en las cargas que
+necesitan almacenamiento persistente.
+
+### Bases de datos
+
+PostgreSQL y MongoDB ya se ejecutan en K3s como StatefulSets gestionados por
+Argo CD, con volúmenes Longhorn y credenciales almacenadas en Secrets. Consulta
+su configuración en [`gitops/apps/postgres/`](gitops/apps/postgres/README.md) y
+[`gitops/apps/mongodb/`](gitops/apps/mongodb/README.md).
 
 Las aplicaciones de K3s acceden a R2 mediante endpoint, región y bucket S3. Las credenciales y los valores sensibles se obtienen desde Secrets de Kubernetes y no se guardan directamente en el repositorio.
 
@@ -150,8 +170,8 @@ La separación principal es:
 
 | Ruta | Destino | Responsabilidad |
 | :--- | :--- | :--- |
-| [`docker/`](docker/) | `h0` | Servicios persistentes ejecutados con Docker Compose |
-| [`gitops/apps/`](gitops/apps/) | Clúster K3s | Aplicaciones reconciliadas por Argo CD |
+| [`docker/`](docker/) | `h0` | Servicios locales ejecutados con Docker Compose |
+| [`gitops/apps/`](gitops/apps/) | Clúster K3s | Aplicaciones, bases de datos y Longhorn reconciliados por Argo CD |
 | [`ansible/`](ansible/) | Toda la infraestructura | Inventario, variables y mantenimiento de hosts |
 | [`scripts/`](scripts/README.md) | Operación | Tareas auxiliares, backups y aprovisionamiento |
 
