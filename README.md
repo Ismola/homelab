@@ -153,7 +153,7 @@ La separación principal es:
 | [`docker/`](docker/) | `h0` | Servicios persistentes ejecutados con Docker Compose |
 | [`gitops/apps/`](gitops/apps/) | Clúster K3s | Aplicaciones reconciliadas por Argo CD |
 | [`ansible/`](ansible/) | Toda la infraestructura | Inventario, variables y mantenimiento de hosts |
-| [`scripts/`](scripts/) | Operación | Tareas auxiliares, backups y aprovisionamiento |
+| [`scripts/`](scripts/README.md) | Operación | Tareas auxiliares, backups y aprovisionamiento |
 
 ## Agradecimientos
 
