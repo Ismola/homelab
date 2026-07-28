@@ -5,6 +5,7 @@ metadata:
 spec:
   statefulSet:
     pod:
+      priorityClassName: homelab-critical
       nodeSelector:
         tags.isma.dev/stable: "true"
       tailscaleContainer:

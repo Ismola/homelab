@@ -23,6 +23,7 @@ spec:
           enabled: false
         ingressClass:
           enabled: false
+        priorityClassName: homelab-critical
         service:
           type: ClusterIP
   destination:

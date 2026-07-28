@@ -13,6 +13,7 @@
 #       valuesObject:
 #         operatorConfig:
 #           hostname: tailscale-operator
+#           priorityClassName: homelab-critical
 #         proxyConfig:
 #           defaultTags: "tag:k8s"
 #   destination:

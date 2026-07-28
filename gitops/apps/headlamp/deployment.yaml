@@ -23,6 +23,7 @@ spec:
     spec:
       serviceAccountName: headlamp
       automountServiceAccountToken: true
+      priorityClassName: homelab-platform
 
       nodeSelector:
         tags.isma.dev/stable: "true"
