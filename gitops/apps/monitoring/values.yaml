@@ -54,9 +54,9 @@ kube-prometheus-stack:
         - ReadWriteOnce
       size: 5Gi
 
-      grafana.ini:
-        users:
-          allow_sign_up: false
+    grafana.ini:
+      users:
+        allow_sign_up: false
 
       auth.anonymous:
         enabled: false
