@@ -55,6 +55,10 @@ kube-prometheus-stack:
       size: 5Gi
 
     grafana.ini:
+      server:
+        domain: grafana.ismola.dev
+        root_url: https://grafana.ismola.dev
+        serve_from_sub_path: false
       users:
         allow_sign_up: false
 
