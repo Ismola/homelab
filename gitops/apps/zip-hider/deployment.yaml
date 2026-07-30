@@ -16,6 +16,15 @@ spec:
       labels:
         app: zip-hider
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: In
+                    values: ["1"]
       containers:
         - name: zip-hider
           image: ghcr.io/ismola/zip-hider:main

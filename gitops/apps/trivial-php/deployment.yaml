@@ -16,6 +16,15 @@ spec:
       labels:
         app: trivial-php
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: In
+                    values: ["1"]
       containers:
         - name: trivial-php
           image: ghcr.io/ismola/trivial-php:main

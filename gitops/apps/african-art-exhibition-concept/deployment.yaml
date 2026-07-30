@@ -16,6 +16,15 @@ spec:
       labels:
         app: african-art-exhibition-concept
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: In
+                    values: ["1"]
       containers:
         - name: african-art-exhibition-concept
           image: ghcr.io/ismola/african-art-exhibition-concept:main

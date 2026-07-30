@@ -12,8 +12,9 @@ longhorn:
     volumeBindingMode: WaitForFirstConsumer
     dataEngine: v1
 
-  # Longhorn sólo crea discos y ejecuta sus componentes en v3/v7, los nodos
-  # marcados desde el inventario de Ansible.
+  # Longhorn sólo crea discos y ejecuta componentes (manager, CSI, engine
+  # images e instance managers) en v3/v7. Los nodos de 1 GiB quedan libres
+  # para node-exporter, cloudflared y frontends pequeños.
   defaultSettings:
     backupTarget: "cifs://100.111.128.66/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4%20Archives/Backup/Longhorn?cifsOptions=vers=3.0,soft"
     backupTargetCredentialSecret: longhorn-smb-credentials

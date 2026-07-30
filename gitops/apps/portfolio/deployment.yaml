@@ -16,6 +16,15 @@ spec:
       labels:
         app: portfolio
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: In
+                    values: ["1"]
       containers:
         - name: portfolio
           image: ghcr.io/ismola/personal-portfolio:master

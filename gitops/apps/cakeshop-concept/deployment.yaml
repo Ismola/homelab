@@ -16,6 +16,15 @@ spec:
       labels:
         app: cakeshop-concept
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: In
+                    values: ["1"]
       containers:
         - name: cakeshop-concept
           image: ghcr.io/ismola/cakeshop-concept:main

@@ -16,6 +16,15 @@ spec:
       labels:
         app: pro-login-animacion
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: In
+                    values: ["1"]
       containers:
         - name: pro-login-animacion
           image: ghcr.io/ismola/pro-login-animacion:main

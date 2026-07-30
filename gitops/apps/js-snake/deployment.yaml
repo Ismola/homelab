@@ -16,6 +16,15 @@ spec:
       labels:
         app: js-snake
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: In
+                    values: ["1"]
       containers:
         - name: js-snake
           image: ghcr.io/ismola/js-snake:main

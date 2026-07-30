@@ -16,6 +16,14 @@ spec:
       labels:
         app: template-next
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: NotIn
+                    values: ["1"]
       containers:
         - name: template-next
           image: ghcr.io/ismola/template-next:main

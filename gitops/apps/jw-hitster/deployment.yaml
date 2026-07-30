@@ -16,6 +16,14 @@ spec:
       labels:
         app: jw-hitster
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: NotIn
+                    values: ["1"]
       containers:
         - name: jw-hitster
           image: ghcr.io/ismola/jw-hitster:main

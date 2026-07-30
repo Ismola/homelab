@@ -16,6 +16,14 @@ spec:
       labels:
         app: sj-wedding
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: isma.dev/ram-gb
+                    operator: NotIn
+                    values: ["1"]
       containers:
         - name: sj-wedding
           image: ghcr.io/ismola/s-j-wedding:main
