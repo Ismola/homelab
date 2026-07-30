@@ -78,11 +78,7 @@ publica como labels `capability.isma.dev/<capacidad>=true`:
 | `stable` | Controladores y servicios críticos |
 | `storage` | Longhorn, sus réplicas y workloads con PVC Longhorn |
 
-Un nodo nuevo sólo necesita sus metadatos (`provider`, `ram_gb`, `cpu`) y la
-lista `capabilities` adecuada. Los argumentos de K3s aplican las etiquetas al
-unirse y
-[`sync-node-capabilities.bash`](scripts/k3s/sync-node-capabilities.bash)
-reconcilia cambios posteriores.
+Un nodo nuevo sólo necesita la lista `capabilities` adecuada. Los argumentos de K3s aplican las etiquetas al unirse y [`sync-node-capabilities.bash`](scripts/k3s/sync-node-capabilities.bash) reconcilia cambios posteriores.
 
 ### Almacenamiento
 
