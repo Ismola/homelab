@@ -14,6 +14,18 @@ spec:
     helm:
       releaseName: traefik-gateway
       valuesObject:
+        deployment:
+          replicas: 3
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: traefik
+                      app.kubernetes.io/instance: traefik-gateway-gateway-system
+                  topologyKey: kubernetes.io/hostname
         providers:
           kubernetesIngress:
             enabled: false
@@ -24,6 +36,13 @@ spec:
         ingressClass:
           enabled: false
         priorityClassName: homelab-critical
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
         service:
           type: ClusterIP
   destination:
