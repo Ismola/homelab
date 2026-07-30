@@ -5,17 +5,19 @@ metadata:
   namespace: argocd
 spec:
   writeBackConfig:
-  method: git:secret:argocd/git-creds
-  gitConfig:
-    repository: https://github.com/Ismola/homelab.git
-    branch: main
-    writeBackTarget: kustomization
+    method: git:secret:argocd/git-creds
+    gitConfig:
+      repository: https://github.com/Ismola/homelab.git
+      branch: main
+      writeBackTarget: kustomization
 
   commonUpdateSettings:
     updateStrategy: digest
+    forceUpdate: false
 
   applicationRefs:
     - namePattern: portfolio
+      useAnnotations: false
       images:
         - alias: portfolio
           imageName: ghcr.io/ismola/personal-portfolio:master
@@ -24,6 +26,7 @@ spec:
               name: ghcr.io/ismola/personal-portfolio
 
     - namePattern: zip-hider
+      useAnnotations: false
       images:
         - alias: ziphider
           imageName: ghcr.io/ismola/zip-hider:main
@@ -31,6 +34,7 @@ spec:
             kustomize:
               name: ghcr.io/ismola/zip-hider
     - namePattern: trivial-php
+      useAnnotations: false
       images:
         - alias: trivialphp
           imageName: ghcr.io/ismola/trivial-php:main
@@ -39,6 +43,7 @@ spec:
               name: ghcr.io/ismola/trivial-php
 
     - namePattern: african-art-exhibition-concept
+      useAnnotations: false
       images:
         - alias: africanartexhibitionconcept
           imageName: ghcr.io/ismola/african-art-exhibition-concept:main
@@ -47,6 +52,7 @@ spec:
               name: ghcr.io/ismola/african-art-exhibition-concept
 
     - namePattern: apple-concept
+      useAnnotations: false
       images:
         - alias: appleconcept
           imageName: ghcr.io/ismola/apple-concept:main
@@ -55,6 +61,7 @@ spec:
               name: ghcr.io/ismola/apple-concept
 
     - namePattern: cakeshop-concept
+      useAnnotations: false
       images:
         - alias: cakeshopconcept
           imageName: ghcr.io/ismola/cakeshop-concept:main
@@ -63,6 +70,7 @@ spec:
               name: ghcr.io/ismola/cakeshop-concept
 
     - namePattern: calendar-subscription-hub
+      useAnnotations: false
       images:
         - alias: asismetro
           imageName: ghcr.io/ismola/asismetro-automations:main
@@ -83,6 +91,7 @@ spec:
               name: ghcr.io/ismola/calendar-subscription-hub-worker
 
     - namePattern: gott-calculator
+      useAnnotations: false
       images:
         - alias: gottcalculator
           imageName: ghcr.io/ismola/gott-calculator:main
@@ -91,6 +100,7 @@ spec:
               name: ghcr.io/ismola/gott-calculator
 
     - namePattern: japon-landing-concept
+      useAnnotations: false
       images:
         - alias: japonlandingconcept
           imageName: ghcr.io/ismola/japon-landing-concept:main
@@ -99,6 +109,7 @@ spec:
               name: ghcr.io/ismola/japon-landing-concept
 
     - namePattern: js-snake
+      useAnnotations: false
       images:
         - alias: jssnake
           imageName: ghcr.io/ismola/js-snake:main
@@ -107,6 +118,7 @@ spec:
               name: ghcr.io/ismola/js-snake
 
     - namePattern: jw-hitster
+      useAnnotations: false
       images:
         - alias: jwhitster
           imageName: ghcr.io/ismola/jw-hitster:main
@@ -115,6 +127,7 @@ spec:
               name: ghcr.io/ismola/jw-hitster
 
     - namePattern: pro-login-animacion
+      useAnnotations: false
       images:
         - alias: prologinanimacion
           imageName: ghcr.io/ismola/pro-login-animacion:main
@@ -123,6 +136,7 @@ spec:
               name: ghcr.io/ismola/pro-login-animacion
 
     - namePattern: sj-wedding
+      useAnnotations: false
       images:
         - alias: sjwedding
           imageName: ghcr.io/ismola/s-j-wedding:main
@@ -131,6 +145,7 @@ spec:
               name: ghcr.io/ismola/s-j-wedding
 
     - namePattern: template-next
+      useAnnotations: false
       images:
         - alias: templatenext
           imageName: ghcr.io/ismola/template-next:main
@@ -139,6 +154,7 @@ spec:
               name: ghcr.io/ismola/template-next
 
     - namePattern: "headlamp"
+      useAnnotations: false
       writeBackConfig:
         method: git
         gitConfig:
@@ -149,12 +165,14 @@ spec:
           imageName: ghcr.io/headlamp-k8s/headlamp:latest
           commonUpdateSettings:
             updateStrategy: semver
+            forceUpdate: false
             allowTags: 'regexp:^v[0-9]+\.[0-9]+\.[0-9]+$'
           manifestTargets:
             kustomize:
               name: ghcr.io/headlamp-k8s/headlamp
     
     - namePattern: "open-date"
+      useAnnotations: false
       images:
         - alias: templatenext
           imageName: ghcr.io/ismola/open-date:main
