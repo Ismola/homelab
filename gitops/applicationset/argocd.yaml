@@ -17,6 +17,8 @@ spec:
         revision: main
         directories:
           - path: gitops/apps/*
+          - path: gitops/apps/sample
+            exclude: true
 
   template:
     metadata:
