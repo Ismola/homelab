@@ -21,7 +21,7 @@ spec:
     spec:
       terminationGracePeriodSeconds: 60
       nodeSelector:
-        tags.isma.dev/longhorn: "true"
+        capability.isma.dev/storage: "true"
 
       securityContext:
         fsGroup: 999

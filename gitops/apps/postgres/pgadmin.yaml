@@ -15,7 +15,7 @@ spec:
         app.kubernetes.io/name: pgadmin
     spec:
       nodeSelector:
-        tags.isma.dev/stable: "true"
+        capability.isma.dev/stable: "true"
       containers:
         - name: pgadmin
           image: dpage/pgadmin4:9.16

@@ -15,16 +15,19 @@ especialmente los scripts de mantenimiento.
 
 ## K3s
 
-### `k3s/sync-node-tags.bash`
+### `k3s/sync-node-capabilities.bash`
 
-Descarga el inventario de Ansible desde GitHub y sincroniza las listas `tags:`
-de los hosts `server` y `agent` con los objetos Node de Kubernetes.
+Descarga el inventario de Ansible desde GitHub y sincroniza las listas
+`capabilities:` de los hosts `server` y `agent` con los objetos Node.
 
-- Crea labels `tags.isma.dev/<tag>=true`.
-- Elimina labels de tags que ya no estén en el inventario.
-- La tag `longhorn` también controla
+- Crea labels `capability.isma.dev/<capacidad>=true`.
+- Elimina capacidades que ya no estén en el inventario.
+- La capacidad `storage` también controla
   `node.longhorn.io/create-default-disk`.
-- Las cargas estables seleccionan `tags.isma.dev/stable=true`.
+- `lightweight` recibe preferentemente frontends de hasta 128 MiB.
+- `general` admite aplicaciones de mayor consumo.
+- `stable` aloja controladores y servicios de infraestructura.
+- `storage` aloja todos los componentes y réplicas de Longhorn.
 - Elimina los antiguos `isma.dev/stable` e `isma.dev/longhorn`, pero conserva
   los labels de inventario `isma.dev/provider`, `isma.dev/cpu` y
   `isma.dev/ram-gb`.
@@ -37,18 +40,29 @@ Previsualizar desde la máquina local mediante SSH:
 
 ```bash
 ssh root@v3.elver-chicken.ts.net \
-  'curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-tags.bash | bash'
+  'curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-capabilities.bash | bash'
 ```
 
 Aplicar:
 
 ```bash
 ssh root@v3.elver-chicken.ts.net \
-  'curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-tags.bash | bash -s -- --apply'
+  'curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-capabilities.bash | bash -s -- --apply'
 ```
 
-Antes de quitar `longhorn` de un nodo con datos hay que deshabilitar su
+Antes de quitar `storage` de un nodo con datos hay que deshabilitar su
 scheduling en Longhorn y esperar a que sus réplicas sean evacuadas.
+
+### `k3s/validate-node-capabilities.bash`
+
+Comprueba que todos los nodos están `Ready`, tienen una clase de cómputo,
+`storage` implica `stable`, node-exporter cubre todo el clúster, Longhorn sólo
+se ejecuta en nodos `storage` y los workloads declaran CPU y memoria.
+
+```bash
+ssh root@v3.elver-chicken.ts.net \
+  'curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/validate-node-capabilities.bash | bash'
+```
 
 ## Mantenimiento
 

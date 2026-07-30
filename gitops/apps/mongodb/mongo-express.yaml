@@ -15,7 +15,7 @@ spec:
         app.kubernetes.io/name: mongo-express
     spec:
       nodeSelector:
-        tags.isma.dev/stable: "true"
+        capability.isma.dev/stable: "true"
       containers:
         - name: mongo-express
           image: mongo-express:1.0.2-20-alpine3.19

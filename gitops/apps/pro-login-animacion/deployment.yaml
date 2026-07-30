@@ -22,9 +22,9 @@ spec:
             - weight: 100
               preference:
                 matchExpressions:
-                  - key: isma.dev/ram-gb
+                  - key: capability.isma.dev/lightweight
                     operator: In
-                    values: ["1"]
+                    values: ["true"]
       containers:
         - name: pro-login-animacion
           image: ghcr.io/ismola/pro-login-animacion:main

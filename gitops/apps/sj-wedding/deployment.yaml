@@ -21,9 +21,9 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                  - key: isma.dev/ram-gb
-                    operator: NotIn
-                    values: ["1"]
+                  - key: capability.isma.dev/general
+                    operator: In
+                    values: ["true"]
       containers:
         - name: sj-wedding
           image: ghcr.io/ismola/s-j-wedding:main

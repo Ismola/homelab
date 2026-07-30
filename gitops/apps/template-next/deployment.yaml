@@ -21,9 +21,9 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                  - key: isma.dev/ram-gb
-                    operator: NotIn
-                    values: ["1"]
+                  - key: capability.isma.dev/general
+                    operator: In
+                    values: ["true"]
       containers:
         - name: template-next
           image: ghcr.io/ismola/template-next:main

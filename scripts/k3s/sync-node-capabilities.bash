@@ -1,7 +1,7 @@
-# Para descargarlo y ejecutarlo aplicando las etiquetas:
-# curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-tags.bash | sudo bash -s -- --apply
+# Para descargarlo y ejecutarlo aplicando las capacidades:
+# curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-capabilities.bash | sudo bash -s -- --apply
 # Para previsualizar los cambios sin aplicarlos:
-# curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-tags.bash | sudo bash
+# curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/k3s/sync-node-capabilities.bash | sudo bash
 
 #!/usr/bin/env bash
 
@@ -39,17 +39,17 @@ curl --fail --silent --show-error --location \
   "${inventory_url}" \
   --output "${inventory_file}"
 
-# Genera líneas con el formato "nodo|tag1,tag2". Sólo procesa los hosts de
+# Genera líneas con el formato "nodo|capability1,capability2". Sólo procesa los hosts de
 # k3s_cluster.children.server/agent; docker_hosts y otros grupos quedan fuera.
 mapfile -t inventory_nodes < <(
   awk '
     function emit_node() {
       if (node != "") {
-        print node "|" tags
+        print node "|" capabilities
       }
       node = ""
-      tags = ""
-      reading_tags = 0
+      capabilities = ""
+      reading_capabilities = 0
     }
 
     /^k3s_cluster:$/ {
@@ -84,26 +84,26 @@ mapfile -t inventory_nodes < <(
       next
     }
 
-    node != "" && /^          tags:[[:space:]]*\[\][[:space:]]*$/ {
-      reading_tags = 0
+    node != "" && /^          capabilities:[[:space:]]*\[\][[:space:]]*$/ {
+      reading_capabilities = 0
       next
     }
 
-    node != "" && /^          tags:[[:space:]]*$/ {
-      reading_tags = 1
+    node != "" && /^          capabilities:[[:space:]]*$/ {
+      reading_capabilities = 1
       next
     }
 
-    reading_tags && /^            - [a-zA-Z0-9_.-]+[[:space:]]*$/ {
-      tag = $0
-      sub(/^            - /, "", tag)
-      sub(/[[:space:]]+$/, "", tag)
-      tags = tags (tags == "" ? "" : ",") tag
+    reading_capabilities && /^            - [a-zA-Z0-9_.-]+[[:space:]]*$/ {
+      capability = $0
+      sub(/^            - /, "", capability)
+      sub(/[[:space:]]+$/, "", capability)
+      capabilities = capabilities (capabilities == "" ? "" : ",") capability
       next
     }
 
-    reading_tags && $0 !~ /^            - / {
-      reading_tags = 0
+    reading_capabilities && $0 !~ /^            - / {
+      reading_capabilities = 0
     }
 
     END {
@@ -134,11 +134,11 @@ fi
 
 for inventory_node in "${inventory_nodes[@]}"; do
   node="${inventory_node%%|*}"
-  tags_csv="${inventory_node#*|}"
-  desired_tags=()
+  capabilities_csv="${inventory_node#*|}"
+  desired_capabilities=()
 
-  if [[ -n "${tags_csv}" ]]; then
-    IFS=',' read -r -a desired_tags <<<"${tags_csv}"
+  if [[ -n "${capabilities_csv}" ]]; then
+    IFS=',' read -r -a desired_capabilities <<<"${capabilities_csv}"
   fi
 
   if ! "${kubectl_command[@]}" get node "${node}" >/dev/null 2>&1; then
@@ -146,30 +146,30 @@ for inventory_node in "${inventory_nodes[@]}"; do
     exit 1
   fi
 
-  mapfile -t current_tags < <(
+  mapfile -t current_capabilities < <(
     "${kubectl_command[@]}" get node "${node}" \
       --show-labels --no-headers |
       awk '{print $NF}' |
       tr ',' '\n' |
-      sed -n 's#^tags\.isma\.dev/\([^=]*\)=.*#\1#p'
+      sed -n 's#^capability\.isma\.dev/\([^=]*\)=.*#\1#p'
   )
 
-  for tag in "${desired_tags[@]}"; do
-    if [[ ! "${tag}" =~ ^[a-z0-9]([-a-z0-9_.]*[a-z0-9])?$ ]]; then
-      echo "Tag no válida en ${node}: ${tag}" >&2
+  for capability in "${desired_capabilities[@]}"; do
+    if [[ ! "${capability}" =~ ^[a-z0-9]([-a-z0-9_.]*[a-z0-9])?$ ]]; then
+      echo "Capacidad no válida en ${node}: ${capability}" >&2
       exit 1
     fi
     run_kubectl label node "${node}" \
-      "tags.isma.dev/${tag}=true" --overwrite
+      "capability.isma.dev/${capability}=true" --overwrite
   done
 
-  for tag in "${current_tags[@]}"; do
-    if ! printf '%s\n' "${desired_tags[@]}" | grep -Fxq "${tag}"; then
-      run_kubectl label node "${node}" "tags.isma.dev/${tag}-"
+  for capability in "${current_capabilities[@]}"; do
+    if ! printf '%s\n' "${desired_capabilities[@]}" | grep -Fxq "${capability}"; then
+      run_kubectl label node "${node}" "capability.isma.dev/${capability}-"
     fi
   done
 
-  if printf '%s\n' "${desired_tags[@]}" | grep -Fxq longhorn; then
+  if printf '%s\n' "${desired_capabilities[@]}" | grep -Fxq storage; then
     run_kubectl label node "${node}" \
       node.longhorn.io/create-default-disk=true --overwrite
     longhorn_allow_scheduling=true
@@ -192,11 +192,13 @@ for inventory_node in "${inventory_nodes[@]}"; do
     fi
   fi
 
-  # Limpieza de los dos labels anteriores a este sistema de tags. No se
-  # eliminan otros labels isma.dev/* como provider, cpu o ram-gb.
+  # Limpieza de los labels anteriores a este sistema de capacidades. No se
+  # eliminan los metadatos isma.dev/* de provider, cpu o ram-gb.
   run_kubectl label node "${node}" \
     isma.dev/stable- \
-    isma.dev/longhorn-
+    isma.dev/longhorn- \
+    tags.isma.dev/stable- \
+    tags.isma.dev/longhorn-
 done
 
 if [[ "${apply}" == false ]]; then

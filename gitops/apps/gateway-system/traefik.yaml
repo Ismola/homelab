@@ -21,8 +21,9 @@ spec:
             requiredDuringSchedulingIgnoredDuringExecution:
               nodeSelectorTerms:
                 - matchExpressions:
-                    - key: node-role.kubernetes.io/control-plane
-                      operator: Exists
+                    - key: capability.isma.dev/stable
+                      operator: In
+                      values: ["true"]
           podAntiAffinity:
             preferredDuringSchedulingIgnoredDuringExecution:
               - weight: 100

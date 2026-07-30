@@ -16,9 +16,10 @@ k3s_cluster:
           ansible_host: v3.elver-chicken.ts.net
           ts_ip: "100.105.109.20"
           provider: oracle
-          tags:
-            - longhorn
+          capabilities:
+            - general
             - stable
+            - storage
           ram_gb: 24
           cpu: 4
           arch: arm64
@@ -28,9 +29,10 @@ k3s_cluster:
           ansible_host: v7.elver-chicken.ts.net
           ts_ip: "100.117.67.57"
           provider: oracle
-          tags:
-            - longhorn
+          capabilities:
+            - general
             - stable
+            - storage
           ram_gb: 12
           cpu: 2
           arch: amd64
@@ -40,7 +42,8 @@ k3s_cluster:
           ansible_host: rpi.elver-chicken.ts.net
           ts_ip: "100.80.157.10"
           provider: homelab
-          tags: []
+          capabilities:
+            - general
           ram_gb: 2
           cpu: 4
           arch: arm64
@@ -54,51 +57,56 @@ k3s_cluster:
           ansible_host: 100.98.234.107
           ts_ip: "100.98.234.107"
           provider: oracle
-          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
           distro: ubuntu
+          capabilities:
+            - lightweight
 
         v2:
           ansible_host: v2.elver-chicken.ts.net
           ts_ip: "100.115.97.88"
           provider: oracle
-          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
           distro: ubuntu
+          capabilities:
+            - lightweight
 
         v4:
           ansible_host: v4.elver-chicken.ts.net
           ts_ip: "100.91.216.33"
           provider: google
-          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
           distro: debian
+          capabilities:
+            - lightweight
 
         v5:
           ansible_host: v5.elver-chicken.ts.net
           ts_ip: "100.111.119.77"
           provider: oracle
-          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
           distro: ubuntu
+          capabilities:
+            - lightweight
 
         v6:
           ansible_host: v6.elver-chicken.ts.net
           ts_ip: "100.90.63.53"
           provider: oracle
-          tags: []
           ram_gb: 1
           cpu: 1
           arch: amd64
           distro: ubuntu
+          capabilities:
+            - lightweight
 
   vars:
     ansible_port: 22
@@ -126,6 +134,9 @@ k3s_cluster:
       --node-label=isma.dev/provider={{ provider }}
       --node-label=isma.dev/ram-gb={{ ram_gb }}
       --node-label=isma.dev/cpu={{ cpu }}
+      {% for capability in capabilities | default([]) %}
+      --node-label=capability.isma.dev/{{ capability }}=true
+      {% endfor %}
 
     extra_agent_args: >-
       --prefer-bundled-bin
@@ -134,6 +145,9 @@ k3s_cluster:
       --node-label=isma.dev/provider={{ provider }}
       --node-label=isma.dev/ram-gb={{ ram_gb }}
       --node-label=isma.dev/cpu={{ cpu }}
+      {% for capability in capabilities | default([]) %}
+      --node-label=capability.isma.dev/{{ capability }}=true
+      {% endfor %}
 
     user_kubectl: true
 

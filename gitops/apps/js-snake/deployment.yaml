@@ -22,9 +22,9 @@ spec:
             - weight: 100
               preference:
                 matchExpressions:
-                  - key: isma.dev/ram-gb
+                  - key: capability.isma.dev/lightweight
                     operator: In
-                    values: ["1"]
+                    values: ["true"]
       containers:
         - name: js-snake
           image: ghcr.io/ismola/js-snake:main

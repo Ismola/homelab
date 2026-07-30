@@ -65,6 +65,25 @@ flowchart TB
 
 Inventario: [`ansible/inventory/inventory.yml`](ansible/inventory/inventory.yml)
 
+### Capacidades de los nodos
+
+La planificación no depende del nombre del host ni de una cifra concreta de
+RAM. Cada nodo declara en el inventario una o varias capacidades que K3s
+publica como labels `capability.isma.dev/<capacidad>=true`:
+
+| Capacidad | Uso |
+| :--- | :--- |
+| `lightweight` | Node exporter, Cloudflared y frontends pequeños |
+| `general` | Aplicaciones con necesidades medias de CPU o memoria |
+| `stable` | Controladores y servicios críticos |
+| `storage` | Longhorn, sus réplicas y workloads con PVC Longhorn |
+
+Un nodo nuevo sólo necesita sus metadatos (`provider`, `ram_gb`, `cpu`) y la
+lista `capabilities` adecuada. Los argumentos de K3s aplican las etiquetas al
+unirse y
+[`sync-node-capabilities.bash`](scripts/k3s/sync-node-capabilities.bash)
+reconcilia cambios posteriores.
+
 ### Almacenamiento
 
 La infraestructura combina tres tipos de almacenamiento con responsabilidades distintas:
@@ -78,8 +97,9 @@ La infraestructura combina tres tipos de almacenamiento con responsabilidades di
 ### Longhorn
 
 Longhorn se ejecuta en K3s y se despliega mediante Argo CD desde
-[`gitops/apps/longhorn/`](gitops/apps/longhorn/). Usa los nodos `v3` y `v7`,
-mantiene dos réplicas por volumen y envía backups por CIFS a `h0`. La
+[`gitops/apps/longhorn/`](gitops/apps/longhorn/). Usa cualquier nodo con
+capacidad `storage`, mantiene dos réplicas por volumen y envía backups por CIFS
+a `h0`. La
 `StorageClass` `longhorn` se selecciona explícitamente en las cargas que
 necesitan almacenamiento persistente.
 

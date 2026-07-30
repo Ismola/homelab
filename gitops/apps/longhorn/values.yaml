@@ -1,7 +1,7 @@
 longhorn:
   global:
     nodeSelector:
-      tags.isma.dev/longhorn: "true"
+      capability.isma.dev/storage: "true"
 
   # No sustituye local-path como StorageClass por defecto. Los StatefulSet
   # deben seleccionar "longhorn" explícitamente.
@@ -23,9 +23,11 @@ longhorn:
     defaultReplicaCount: '{"v1":"2"}'
     replicaSoftAntiAffinity: false
     replicaDiskSoftAntiAffinity: false
-    systemManagedComponentsNodeSelector: "tags.isma.dev/longhorn:true"
+    systemManagedComponentsNodeSelector: "capability.isma.dev/storage:true"
     storageOverProvisioningPercentage: 100
-    storageMinimalAvailablePercentage: 25
+    # v3 conserva margen para el sistema, pero puede alojar las segundas
+    # réplicas de los volúmenes de 1 GiB.
+    storageMinimalAvailablePercentage: 15
     storageReservedPercentageForDefaultDisk: 20
     disableSchedulingOnCordonedNode: true
     upgradeChecker: false
@@ -42,11 +44,11 @@ longhorn:
   longhornUI:
     replicas: 2
     nodeSelector:
-      tags.isma.dev/stable: "true"
+      capability.isma.dev/stable: "true"
 
   longhornDriver:
     nodeSelector:
-      tags.isma.dev/stable: "true"
+      capability.isma.dev/stable: "true"
 
   service:
     ui:

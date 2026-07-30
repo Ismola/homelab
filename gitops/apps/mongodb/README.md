@@ -2,7 +2,7 @@
 
 MongoDB se ejecuta como un StatefulSet de una réplica con un volumen Longhorn
 de `1Gi`, ampliable posteriormente. El pod se programa únicamente en nodos con
-`tags.isma.dev/longhorn=true`, donde está disponible el CSI.
+`capability.isma.dev/storage=true`, donde está disponible el CSI.
 
 ## Credenciales
 

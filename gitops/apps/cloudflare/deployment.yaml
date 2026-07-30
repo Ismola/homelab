@@ -26,9 +26,9 @@ spec:
             - weight: 100
               preference:
                 matchExpressions:
-                  - key: isma.dev/ram-gb
+                  - key: capability.isma.dev/lightweight
                     operator: In
-                    values: ["1"]
+                    values: ["true"]
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname

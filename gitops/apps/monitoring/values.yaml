@@ -36,7 +36,7 @@ kube-prometheus-stack:
       enabled: false
 
     nodeSelector:
-      tags.isma.dev/stable: "true"
+      capability.isma.dev/stable: "true"
 
     resources:
       requests:
@@ -122,7 +122,7 @@ kube-prometheus-stack:
       walCompression: true
 
       nodeSelector:
-        tags.isma.dev/stable: "true"
+        capability.isma.dev/stable: "true"
 
       resources:
         requests:
@@ -149,7 +149,7 @@ kube-prometheus-stack:
       replicas: 1
 
       nodeSelector:
-        tags.isma.dev/stable: "true"
+        capability.isma.dev/stable: "true"
 
       resources:
         requests:
@@ -171,7 +171,7 @@ kube-prometheus-stack:
 
   prometheusOperator:
     nodeSelector:
-      tags.isma.dev/stable: "true"
+      capability.isma.dev/stable: "true"
 
     resources:
       requests:
@@ -183,7 +183,7 @@ kube-prometheus-stack:
 
   kube-state-metrics:
     nodeSelector:
-      tags.isma.dev/stable: "true"
+      capability.isma.dev/stable: "true"
 
     resources:
       requests:
