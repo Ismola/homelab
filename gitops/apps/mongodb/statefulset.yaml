@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/name: mongodb
 spec:
   serviceName: mongodb-headless
-  replicas: 0
+  replicas: 1
   revisionHistoryLimit: 3
   podManagementPolicy: OrderedReady
 
