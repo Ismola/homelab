@@ -1258,11 +1258,17 @@
       }}
 
     drain_delete_emptydir_data: true
+    # Longhorn puede bloquear el drain mediante sus PodDisruptionBudgets.
+    # Se usa borrado directo conservando el timeout y el tratamiento serial.
+    drain_disable_eviction: true
     drain_timeout: 45m
     drain_operation_timeout_seconds: 3000
     node_ready_timeout: 30m
     workload_ready_timeout: 20m
     cluster_settle_seconds: 30
+    k3s_pod_cidr: 10.42.0.0/16
+    k3s_forward_rule_comment: allow-k3s-pod-forwarding
+    k3s_forward_service_name: k3s-pod-forwarding.service
     # Los PVC local-path no pueden moverse mientras su nodo está drenado.
     # Se validan antes del drain y otra vez después del uncordon.
     maintenance_local_workloads:
@@ -1471,7 +1477,7 @@
         argv:
           - /bin/sh
           - -c
-          - command -v fuser timeout pgrep swapon swapoff mkswap
+          - command -v fuser timeout pgrep swapon swapoff mkswap iptables-nft
       register: required_maintenance_tools
       changed_when: false
 
@@ -2161,7 +2167,7 @@
           ansible.builtin.set_fact:
             node_cordon_confirmed: true
 
-        - name: Drenar el nodo respetando PodDisruptionBudgets
+        - name: Drenar el nodo con la política de eviction configurada
           ansible.builtin.command:
             cmd: >-
               {{ k3s_binary }} kubectl
@@ -2170,6 +2176,7 @@
               --ignore-daemonsets
               --timeout={{ drain_timeout }}
               {% if drain_delete_emptydir_data | bool %}--delete-emptydir-data{% endif %}
+              {% if drain_disable_eviction | bool %}--disable-eviction{% endif %}
           delegate_to: "{{ maintenance_kubectl_host }}"
           async: "{{ drain_operation_timeout_seconds }}"
           poll: 15
@@ -3292,6 +3299,52 @@
             state: started
             enabled: true
             daemon_reload: true
+
+        - name: Persistir la regla de forwarding de pods K3s
+          ansible.builtin.copy:
+            dest: "/etc/systemd/system/{{ k3s_forward_service_name }}"
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              [Unit]
+              Description=Allow K3s pod forwarding
+              After={{ k3s_service_name }}.service
+              Wants={{ k3s_service_name }}.service
+
+              [Service]
+              Type=oneshot
+              ExecStart=/bin/sh -ec '/usr/sbin/iptables-nft -C FORWARD -s {{ k3s_pod_cidr }} -d {{ k3s_pod_cidr }} -m comment --comment {{ k3s_forward_rule_comment }} -j ACCEPT || /usr/sbin/iptables-nft -I FORWARD 1 -s {{ k3s_pod_cidr }} -d {{ k3s_pod_cidr }} -m comment --comment {{ k3s_forward_rule_comment }} -j ACCEPT'
+              RemainAfterExit=yes
+
+              [Install]
+              WantedBy=multi-user.target
+          register: k3s_forward_service_unit
+
+        - name: Aplicar y habilitar la regla de forwarding de pods K3s
+          ansible.builtin.systemd:
+            name: "{{ k3s_forward_service_name }}"
+            state: restarted
+            enabled: true
+            daemon_reload: "{{ k3s_forward_service_unit.changed }}"
+
+        - name: Verificar la regla de forwarding de pods K3s
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/iptables-nft
+              - -C
+              - FORWARD
+              - -s
+              - "{{ k3s_pod_cidr }}"
+              - -d
+              - "{{ k3s_pod_cidr }}"
+              - -m
+              - comment
+              - --comment
+              - "{{ k3s_forward_rule_comment }}"
+              - -j
+              - ACCEPT
+          changed_when: false
 
         - name: Esperar a que tailscaled esté activo
           ansible.builtin.command:
