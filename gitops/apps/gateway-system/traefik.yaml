@@ -40,6 +40,8 @@ spec:
             enabled: true
         gateway:
           enabled: false
+        gatewayClass:
+          enabled: false
         ingressClass:
           enabled: false
         priorityClassName: homelab-critical
