@@ -59,6 +59,25 @@ if [[ "${exporter_ready}" != "${node_count}" ]]; then
   fail "node-exporter está Ready en ${exporter_ready}/${node_count} nodos"
 fi
 
+while IFS=$'\t' read -r namespace kind name desired available; do
+  [[ -z "${name}" ]] && continue
+  fail "${namespace}/${kind}/${name} tiene ${available}/${desired} réplicas disponibles"
+done < <(
+  "${kubectl_command[@]}" get deploy,statefulset -A -o json |
+    jq -r '
+      .items[]
+      | select((.status.availableReplicas // 0) < (.spec.replicas // 1))
+      | [
+          .metadata.namespace,
+          .kind,
+          .metadata.name,
+          (.spec.replicas // 1),
+          (.status.availableReplicas // 0)
+        ]
+      | @tsv
+    '
+)
+
 while IFS=$'\t' read -r pod node; do
   [[ -z "${pod}" ]] && continue
   if [[ "${storage_by_node[${node}]:-}" != "true" ]]; then
@@ -70,6 +89,25 @@ done < <(
       .items[]
       | select(.status.phase != "Succeeded")
       | [.metadata.name, .spec.nodeName]
+      | @tsv
+    '
+)
+
+while IFS=$'\t' read -r volume state robustness replicas; do
+  [[ -z "${volume}" ]] && continue
+  if [[ "${state}" != "attached" || "${robustness}" != "healthy" || "${replicas}" -lt 2 ]]; then
+    fail "Longhorn ${volume}: state=${state}, robustness=${robustness}, replicas=${replicas}"
+  fi
+done < <(
+  "${kubectl_command[@]}" -n longhorn get volumes.longhorn.io -o json |
+    jq -r '
+      .items[]
+      | [
+          .metadata.name,
+          .status.state,
+          .status.robustness,
+          .spec.numberOfReplicas
+        ]
       | @tsv
     '
 )
