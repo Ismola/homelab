@@ -1,0 +1,55 @@
+---
+- name: Permitir el forwarding entre pods K3s
+  hosts: k3s_cluster
+  gather_facts: false
+  serial: 4
+  vars:
+    k3s_pod_cidr: 10.42.0.0/16
+    k3s_forward_rule_comment: allow-k3s-pod-forwarding
+    k3s_forward_service_name: k3s-pod-forwarding.service
+
+  tasks:
+    - name: Instalar el servicio persistente de forwarding
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ k3s_forward_service_name }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Allow K3s pod forwarding
+          After=k3s.service k3s-agent.service tailscaled.service
+          Wants=tailscaled.service
+
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/sh -ec '/usr/sbin/iptables-nft -C FORWARD -s {{ k3s_pod_cidr }} -d {{ k3s_pod_cidr }} -m comment --comment {{ k3s_forward_rule_comment }} -j ACCEPT || /usr/sbin/iptables-nft -I FORWARD 1 -s {{ k3s_pod_cidr }} -d {{ k3s_pod_cidr }} -m comment --comment {{ k3s_forward_rule_comment }} -j ACCEPT'
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Habilitar y aplicar la regla
+      ansible.builtin.systemd:
+        name: "{{ k3s_forward_service_name }}"
+        state: restarted
+        enabled: true
+        daemon_reload: true
+
+    - name: Verificar la regla
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/iptables-nft
+          - -C
+          - FORWARD
+          - -s
+          - "{{ k3s_pod_cidr }}"
+          - -d
+          - "{{ k3s_pod_cidr }}"
+          - -m
+          - comment
+          - --comment
+          - "{{ k3s_forward_rule_comment }}"
+          - -j
+          - ACCEPT
+      changed_when: false
