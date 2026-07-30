@@ -9,6 +9,13 @@ spec:
   replicas: 1
   revisionHistoryLimit: 3
   podManagementPolicy: OrderedReady
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
 
   selector:
     matchLabels:
@@ -105,6 +112,7 @@ spec:
         accessModes:
           - ReadWriteOnce
         storageClassName: longhorn
+        volumeMode: Filesystem
         resources:
           requests:
             storage: 1Gi
