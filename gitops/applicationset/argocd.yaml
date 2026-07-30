@@ -56,3 +56,13 @@ spec:
           - DisableClientSideApplyMigration=true
           - SkipDryRunOnMissingResource=true
     {{- end }}
+    {{- if or (eq .path.basenameNormalized "mongodb") (eq .path.basenameNormalized "postgres") }}
+    spec:
+      ignoreDifferences:
+        - group: apps
+          kind: StatefulSet
+          jsonPointers:
+            # Server-side apply materializa el estado de la plantilla PVC
+            # dentro del StatefulSet; no es configuración declarativa.
+            - /spec/volumeClaimTemplates/0/status
+    {{- end }}
