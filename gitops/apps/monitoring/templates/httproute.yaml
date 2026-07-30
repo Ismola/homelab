@@ -5,7 +5,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   parentRefs:
-    - name: traefik
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik
       namespace: gateway-system
   hostnames:
     - "grafana.ismola.dev"
@@ -15,5 +17,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: "{{ .Release.Name }}-grafana"
+        - group: ""
+          kind: Service
+          name: "{{ .Release.Name }}-grafana"
           port: 80
+          weight: 1

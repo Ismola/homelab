@@ -5,7 +5,9 @@ metadata:
   namespace: apple-concept
 spec:
   parentRefs:
-    - name: traefik
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik
       namespace: gateway-system
   hostnames:
     - "apple-concept.ismola.dev"
@@ -15,5 +17,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: apple-concept
+        - group: ""
+          kind: Service
+          name: apple-concept
           port: 80
+          weight: 1

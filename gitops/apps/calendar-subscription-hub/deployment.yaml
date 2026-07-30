@@ -349,7 +349,9 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   parentRefs:
-    - name: traefik
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik
       namespace: gateway-system
   hostnames:
     - "calendar-subscription-hub.ismola.dev"
@@ -359,5 +361,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: calendar-subscription-hub-web
+        - group: ""
+          kind: Service
+          name: calendar-subscription-hub-web
           port: 3000
+          weight: 1

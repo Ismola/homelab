@@ -5,7 +5,9 @@ metadata:
   namespace: zip-hider
 spec:
   parentRefs:
-    - name: traefik
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik
       namespace: gateway-system
   hostnames:
     - "zip-hider.ismola.dev"
@@ -15,5 +17,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: zip-hider
+        - group: ""
+          kind: Service
+          name: zip-hider
           port: 80
+          weight: 1

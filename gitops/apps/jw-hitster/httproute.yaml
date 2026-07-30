@@ -5,7 +5,9 @@ metadata:
   namespace: jw-hitster
 spec:
   parentRefs:
-    - name: traefik
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik
       namespace: gateway-system
   hostnames:
     - "jw-hitster.ismola.dev"
@@ -15,5 +17,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: jw-hitster
+        - group: ""
+          kind: Service
+          name: jw-hitster
           port: 80
+          weight: 1

@@ -5,7 +5,9 @@ metadata:
   namespace: gott-calculator
 spec:
   parentRefs:
-    - name: traefik
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik
       namespace: gateway-system
   hostnames:
     - "gott-calculator.ismola.dev"
@@ -15,5 +17,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: gott-calculator
+        - group: ""
+          kind: Service
+          name: gott-calculator
           port: 80
+          weight: 1

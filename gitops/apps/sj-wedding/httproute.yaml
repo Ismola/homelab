@@ -5,7 +5,9 @@ metadata:
   namespace: sj-wedding
 spec:
   parentRefs:
-    - name: traefik
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: traefik
       namespace: gateway-system
   hostnames:
     - "sj-wedding.ismola.dev"
@@ -15,5 +17,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: sj-wedding
+        - group: ""
+          kind: Service
+          name: sj-wedding
           port: 80
+          weight: 1
