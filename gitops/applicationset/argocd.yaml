@@ -62,7 +62,10 @@ spec:
         - group: apps
           kind: StatefulSet
           jsonPointers:
-            # Server-side apply materializa el estado de la plantilla PVC
-            # dentro del StatefulSet; no es configuración declarativa.
+            # La API materializa metadatos y estado internos de la plantilla
+            # PVC dentro del StatefulSet; no son configuración declarativa.
+            - /spec/volumeClaimTemplates/0/apiVersion
+            - /spec/volumeClaimTemplates/0/kind
+            - /spec/volumeClaimTemplates/0/metadata/creationTimestamp
             - /spec/volumeClaimTemplates/0/status
     {{- end }}
