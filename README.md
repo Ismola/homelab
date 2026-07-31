@@ -193,7 +193,7 @@ La separación principal es:
 
 ## Agradecimientos
 
-Gracias a [Tailscale](https://tailscale.com/) por simplificar la red privada que conecta todos los nodos, y a [Oracle Cloud](https://www.oracle.com/cloud/) por proporcionar parte de la infraestructura sobre la que funciona este homelab.
+Gracias a [Tailscale](https://tailscale.com/) por simplificar la red privada que conecta todos los nodos, [GCP](https://console.cloud.google.com/?pli=1) y [Oracle Cloud](https://www.oracle.com/cloud/) por proporcionar parte de la infraestructura sobre la que funciona este homelab.
 
 ---
 
