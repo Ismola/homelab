@@ -54,7 +54,7 @@ k3s_cluster:
         instance-20240424-2202:
           # Este nombre supera el formato que MagicDNS publica de forma
           # consistente; se usa la IP estable de la tailnet.
-          ansible_host: 100.98.234.107
+          ansible_host: instance-20240424-2202.elver-chicken.ts.net
           ts_ip: "100.98.234.107"
           provider: oracle
           ram_gb: 1
@@ -156,10 +156,10 @@ k3s_cluster:
 # (api_endpoint) para el final.
 k3s_maintenance_targets:
   hosts:
+    instance-20240424-2202:
     v3:
     v7:
     rpi:
-    v1:
     v2:
     v4:
     v5:
