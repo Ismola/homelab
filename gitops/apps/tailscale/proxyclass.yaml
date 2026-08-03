@@ -9,6 +9,9 @@ spec:
       nodeSelector:
         capability.isma.dev/stable: "true"
       tailscaleContainer:
+        env:
+          - name: TS_DEBUG_MTU
+            value: "1150"
         resources:
           requests:
             cpu: 50m
