@@ -55,7 +55,6 @@ data:
 
 
         - DataBase:
-
             - pgAdmin:
                 icon: pgadmin.png
                 href: https://pgadmin.elver-chicken.ts.net
@@ -120,10 +119,10 @@ data:
                 icon: mdi-router-wireless
                 href: http://192.168.1.1
                 description: Router principal
-            - TP-Link:
-                icon: tplink.png
-                href: http://192.168.1.130
-                description: Dispositivo de red TP-Link
+            # - TP-Link:
+            #     icon: tplink.png
+            #     href: http://192.168.1.130
+            #     description: Dispositivo de red TP-Link
             # - WireGuard:
             #     icon: wireguard.png
             #     href: https://wg-easy.ismola.dev
