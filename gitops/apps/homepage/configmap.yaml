@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage
+  labels:
+    app.kubernetes.io/name: homepage
+    app.kubernetes.io/instance: homepage
+data:
+  kubernetes.yaml: |
+    mode: cluster
+    gateway: true
+
+  settings.yaml: |
+    title: Homelab
+    description: Panel privado del homelab
+    language: es
+    theme: dark
+    color: slate
+    headerStyle: clean
+    statusStyle: dot
+    hideVersion: true
+
+  services.yaml: |
+    - Administración:
+        - Argo CD:
+            icon: argo-cd.png
+            href: https://argocd.elver-chicken.ts.net
+            description: Despliegues GitOps
+        - Headlamp:
+            icon: headlamp.png
+            href: https://headlamp.elver-chicken.ts.net
+            description: Administración de Kubernetes
+        - Longhorn:
+            icon: longhorn.png
+            href: https://longhorn.elver-chicken.ts.net
+            description: Almacenamiento del clúster
+        - Grafana:
+            icon: grafana.png
+            href: https://grafana.elver-chicken.ts.net
+            description: Métricas y observabilidad
+    - Datos:
+        - pgAdmin:
+            icon: pgadmin.png
+            href: https://pgadmin.elver-chicken.ts.net
+            description: PostgreSQL
+        - Mongo Express:
+            icon: mongodb.png
+            href: https://mongo-express.elver-chicken.ts.net
+            description: MongoDB
+
+  widgets.yaml: |
+    - kubernetes:
+        cluster:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+          label: k3s
+        nodes:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+    - search:
+        provider: duckduckgo
+        target: _blank
+
+  bookmarks.yaml: |
+    - Desarrollo:
+        - Homelab:
+            - icon: github.png
+              href: https://github.com/Ismola/homelab
+              description: Repositorio GitOps
+
+  docker.yaml: ""
+  custom.css: ""
+  custom.js: ""
