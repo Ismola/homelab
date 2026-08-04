@@ -154,7 +154,7 @@ data:
                 icon: zoom.png
                 href: https://zoom.us/j/99721504946
                 description: Acceso a la reunión
-            - Mail Siryus
+            - Mail Siryus:
                 icon: mdi-email-outline
                 href: https://servidor.siryus-system.com/webmail/
                 description: Correo electrónico de Siryus
