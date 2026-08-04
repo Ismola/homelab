@@ -24,19 +24,19 @@ data:
         - Administration:
             - Argo CD:
                 icon: argo-cd.png
-                href: https://argocd.elver-chicken.ts.net
+                href: https://argocd.ismola.dev
                 description: Despliegues GitOps
             - Headlamp:
                 icon: headlamp.png
-                href: https://headlamp.elver-chicken.ts.net
+                href: https://headlamp.ismola.dev
                 description: Administración de Kubernetes
             - Longhorn:
                 icon: longhorn.png
-                href: https://longhorn.elver-chicken.ts.net
+                href: https://longhorn.ismola.dev
                 description: Almacenamiento del clúster
             - Grafana:
                 icon: grafana.png
-                href: https://grafana.elver-chicken.ts.net
+                href: https://grafana.ismola.dev
                 description: Métricas y observabilidad
             - Portainer:
                 icon: portainer.png
@@ -57,11 +57,11 @@ data:
         - DataBase:
             - pgAdmin:
                 icon: pgadmin.png
-                href: https://pgadmin.elver-chicken.ts.net
+                href: https://pgadmin.ismola.dev
                 description: PostgreSQL
             - Mongo Express:
                 icon: mongodb.png
-                href: https://mongo-express.elver-chicken.ts.net
+                href: https://mongo-express.ismola.dev
                 description: MongoDB
 
 
