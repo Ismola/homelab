@@ -180,51 +180,51 @@ data:
                   href: https://github.com/Ismola/homelab
                   description: Repositorio GitOps
             - ismola.dev:
-                icon: mdi-web
-                href: https://ismola.dev
-                description: Web personal
+                - icon: mdi-web
+                  href: https://ismola.dev
+                  description: Web personal
             - Gott Calculator:
-                icon: mdi-calculator
-                href: https://gott-calculator.ismola.dev
+                - icon: mdi-calculator
+                  href: https://gott-calculator.ismola.dev
             - Open Date:
-                icon: mdi-calendar-heart
-                href: https://open-date.ismola.dev
+                - icon: mdi-calendar-heart
+                  href: https://open-date.ismola.dev
             - Sergio & Judit:
-                icon: mdi-ring
-                href: https://sj-wedding.ismola.dev
+                - icon: mdi-ring
+                  href: https://sj-wedding.ismola.dev
             - Cakeshop:
-                icon: mdi-cake-variant
-                href: https://cakeshop-concept.ismola.dev
+                - icon: mdi-cake-variant
+                  href: https://cakeshop-concept.ismola.dev
             - JW Hitster:
-                icon: mdi-music-circle
-                href: https://jw-hitster.ismola.dev/es
+                - icon: mdi-music-circle
+                  href: https://jw-hitster.ismola.dev/es
             - Zip Hider:
-                icon: mdi-folder-zip
-                href: https://zip-hider.ismola.dev
+                - icon: mdi-folder-zip
+                  href: https://zip-hider.ismola.dev
             - Japón Landing:
-                icon: mdi-torii-gate
-                href: https://japon-landing-concept.ismola.dev
+                - icon: mdi-torii-gate
+                  href: https://japon-landing-concept.ismola.dev
             - Login Animation:
-                icon: mdi-login-variant
-                href: https://pro-login-animacion.ismola.dev
+                - icon: mdi-login-variant
+                  href: https://pro-login-animacion.ismola.dev
             - Snake:
-                icon: mdi-snake
-                href: https://js-snake.ismola.dev
+                - icon: mdi-snake
+                  href: https://js-snake.ismola.dev
             - Apple Concept:
-                icon: apple.png
-                href: https://apple-concept.ismola.dev
+                - icon: apple.png
+                  href: https://apple-concept.ismola.dev
             - African Art:
-                icon: mdi-palette
-                href: https://african-art-exhibition-concept.ismola.dev
+                - icon: mdi-palette
+                  href: https://african-art-exhibition-concept.ismola.dev
             - Template Next:
-                icon: nextjs.png
-                href: https://template-next.ismola.dev/en
+                - icon: nextjs.png
+                  href: https://template-next.ismola.dev/en
             - Calendar Hub:
-                icon: mdi-calendar-sync
-                href: https://calendar-subscription-hub.ismola.dev
+                - icon: mdi-calendar-sync
+                  href: https://calendar-subscription-hub.ismola.dev
             - Trivial:
-                icon: mdi-code-tags
-                href: https://trivial-php.ismola.dev
+                - icon: mdi-code-tags
+                  href: https://trivial-php.ismola.dev
 
     docker.yaml: ""
     proxmox.yaml: ""
