@@ -10,6 +10,7 @@ resources:
   - limitrange.yaml
   - deployment.yaml
   - service.yaml
+  - httproute.yaml
   - ingress-tailscale.yaml
 
 images:
