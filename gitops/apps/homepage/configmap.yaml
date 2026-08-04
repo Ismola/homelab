@@ -21,7 +21,7 @@ data:
     hideVersion: true
 
   services.yaml: |
-    - Administración:
+    - Kubernetes:
         - Argo CD:
             icon: argo-cd.png
             href: https://argocd.elver-chicken.ts.net
@@ -38,7 +38,20 @@ data:
             icon: grafana.png
             href: https://grafana.elver-chicken.ts.net
             description: Métricas y observabilidad
-    - Datos:
+
+    - Administración y datos:
+        - Portainer:
+            icon: portainer.png
+            href: http://h0:9000
+            description: Administración de contenedores Docker
+        - UGos:
+            icon: openmediavault.png
+            href: http://h0:9999
+            description: Administración del almacenamiento de h0
+        - Nginx Proxy Manager:
+            icon: nginx-proxy-manager.png
+            href: http://h0:81
+            description: Proxy inverso y certificados
         - pgAdmin:
             icon: pgadmin.png
             href: https://pgadmin.elver-chicken.ts.net
@@ -47,6 +60,146 @@ data:
             icon: mongodb.png
             href: https://mongo-express.elver-chicken.ts.net
             description: MongoDB
+        - Duplicati:
+            icon: duplicati.png
+            href: http://h0:8200
+            description: Copias de seguridad
+
+    - Multimedia:
+        - Plex:
+            icon: plex.png
+            href: https://plex.ismola.dev
+            description: Biblioteca multimedia
+        - Immich:
+            icon: immich.png
+            href: https://immich.ismola.dev
+            description: Fotos y vídeos
+        - Overseerr:
+            icon: overseerr.png
+            href: http://h0:5055
+            description: Solicitudes multimedia
+        - Sonarr:
+            icon: sonarr.png
+            href: http://h0:8989
+            description: Gestión de series
+        - Radarr:
+            icon: radarr.png
+            href: http://h0:7878
+            description: Gestión de películas
+        - Bazarr:
+            icon: bazarr.png
+            href: http://h0:6767
+            description: Gestión de subtítulos
+        - Prowlarr:
+            icon: prowlarr.png
+            href: http://h0:9696
+            description: Gestión de indexadores
+        - Jackett:
+            icon: jackett.png
+            href: http://h0:9117
+            description: Proxy de indexadores
+        - qBittorrent:
+            icon: qbittorrent.png
+            href: http://h0:8585
+            description: Cliente BitTorrent
+        - qBitManager:
+            icon: mdi-download-network-outline
+            href: http://h0:8181
+            description: Automatización de qBittorrent
+
+    - Red:
+        - Router:
+            icon: mdi-router-wireless
+            href: http://192.168.1.1
+            description: Router principal
+        - TP-Link:
+            icon: tplink.png
+            href: http://192.168.1.130
+            description: Dispositivo de red TP-Link
+        - Pi-hole:
+            icon: pi-hole.png
+            href: http://h0:8080/admin
+            description: DNS y bloqueo de publicidad
+        - WireGuard:
+            icon: wireguard.png
+            href: https://wg-easy.ismola.dev
+            description: Administración de WireGuard
+
+    - Proyectos:
+        - ismola.dev:
+            icon: mdi-web
+            href: https://ismola.dev
+            description: Web personal
+        - Gott Calculator:
+            icon: mdi-calculator
+            href: https://gott-calculator.ismola.dev
+        - Open Date:
+            icon: mdi-calendar-heart
+            href: https://open-date.ismola.dev
+        - Sergio & Judit:
+            icon: mdi-ring
+            href: https://sj-wedding.ismola.dev
+        - Cakeshop:
+            icon: mdi-cake-variant
+            href: https://cakeshop-concept.ismola.dev
+        - JW Hitster:
+            icon: mdi-music-circle
+            href: https://jw-hitster.ismola.dev/es
+        - Zip Hider:
+            icon: mdi-folder-zip
+            href: https://zip-hider.ismola.dev
+        - Japón Landing:
+            icon: mdi-torii-gate
+            href: https://japon-landing-concept.ismola.dev
+        - Login Animation:
+            icon: mdi-login-variant
+            href: https://pro-login-animacion.ismola.dev
+        - Snake:
+            icon: mdi-snake
+            href: https://js-snake.ismola.dev
+        - Apple Concept:
+            icon: apple.png
+            href: https://apple-concept.ismola.dev
+        - African Art:
+            icon: mdi-palette
+            href: https://african-art-exhibition-concept.ismola.dev
+        - Template Next:
+            icon: nextjs.png
+            href: https://template-next.ismola.dev/en
+        - Calendar Hub:
+            icon: mdi-calendar-sync
+            href: https://calendar-subscription-hub.ismola.dev
+        - Trivial:
+            icon: mdi-code-tags
+            href: https://trivial-php.ismola.dev
+
+    - Nube y desarrollo:
+        - OpenCloud:
+            icon: mdi-cloud
+            href: https://opencloud.ismola.dev
+            description: Archivos personales
+        - GitHub:
+            icon: github.png
+            href: https://github.com/Ismola
+        - Cloudflare:
+            icon: cloudflare.png
+            href: https://dash.cloudflare.com
+        - Oracle Cloud:
+            icon: oracle.png
+            href: https://www.oracle.com/cloud
+        - Tailscale:
+            icon: tailscale.png
+            href: https://login.tailscale.com/admin/machines
+
+    - Utilidades:
+        - Zoom Villanueva de la Torre:
+            icon: zoom.png
+            href: https://us02web.zoom.us/j/83531341977
+            description: Acceso a la reunión
+        - Zoom Siryus Soporte:
+            icon: zoom.png
+            href: https://zoom.us/j/99721504946
+            description: Acceso a la reunión
 
   widgets.yaml: |
     - kubernetes:
