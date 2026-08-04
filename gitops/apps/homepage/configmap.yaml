@@ -226,5 +226,6 @@ data:
               description: Repositorio GitOps
 
   docker.yaml: ""
+  proxmox.yaml: ""
   custom.css: ""
   custom.js: ""
