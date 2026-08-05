@@ -2,3 +2,4 @@ include:
   - path: ./cloudflare/compose.yml
   - path: ./media/compose.yml
   - path: ./networking/compose.yml
+  - path: ./watchtower/compose.yml

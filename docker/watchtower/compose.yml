@@ -1,19 +1,6 @@
 version: "2.1"
 
 services:
-  heimdall:
-    image: ghcr.io/linuxserver/heimdall:latest
-    container_name: heimdall
-    environment:
-      - PUID=1000
-      - PGID=10
-      - TZ=Europe/Madrid
-    volumes:
-      - ${DOCKER_PATH}/heimdall:/config
-    ports:
-      - 9001:80
-      # - 40443:443
-    restart: unless-stopped
     
   watchtower:
     image: nickfedor/watchtower:latest
