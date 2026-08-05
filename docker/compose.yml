@@ -1,2 +1,2 @@
 include:
-  - path: ./stacks/cloudflare/compose.yml
+  - path: ./cloudflare/compose.yml
