@@ -67,7 +67,6 @@ flowchart TB
     subgraph k3s_deployments["Aplicaciones GitOps · K3s"]
         gitops_african_art_exhibition_concept["african-art-exhibition-concept"]
         gitops_apple_concept["apple-concept"]
-        gitops_argocd["argocd"]
         gitops_argocd_image_updater["argocd-image-updater"]
         gitops_cakeshop_concept["cakeshop-concept"]
         gitops_calendar_subscription_hub["calendar-subscription-hub"]
