@@ -30,43 +30,43 @@ services:
     volumes:
       - ${DOCKER_PATH}/npm/data:/data
       - ${DOCKER_PATH}/npm/letsencrypt:/etc/letsencrypt
-    networks:
-      - default
-      - proxy_network
+    # networks:
+    #   - default
+    #   - proxy_network
 
 
-  tailscale:
-    image: tailscale/tailscale:latest
-    network_mode: host
-    container_name: tailscale
-    hostname: h0
-    environment:
-      - TS_AUTHKEY=${TS_AUTHKEY}
-      - TS_EXTRA_ARGS=--advertise-exit-node --advertise-routes=192.168.1.0/24
-      # Esto hace falta para que el splitDNS funcione
-      - TS_USERSPACE=false
-      - TS_STATE_DIR=/var/lib/tailscale
-      # - TS_TAILSCALED_EXTRA_ARGS=--port=37036
-    volumes:
-      - ${DOCKER_PATH}/tailscale/state:/var/lib/tailscale
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - net_admin
-      - net_raw
-    restart: unless-stopped
+  # tailscale:
+  #   image: tailscale/tailscale:latest
+  #   # network_mode: host
+  #   container_name: tailscale
+  #   hostname: h0
+  #   environment:
+  #     - TS_AUTHKEY=${TS_AUTHKEY}
+  #     - TS_EXTRA_ARGS=--advertise-exit-node --advertise-routes=192.168.1.0/24
+  #     # Esto hace falta para que el splitDNS funcione
+  #     # - TS_USERSPACE=false
+  #     - TS_STATE_DIR=/var/lib/tailscale
+  #     # - TS_TAILSCALED_EXTRA_ARGS=--port=37036
+  #   volumes:
+  #     - ${DOCKER_PATH}/tailscale/state:/var/lib/tailscale
+  #   devices:
+  #     - /dev/net/tun:/dev/net/tun
+  #   cap_add:
+  #     - net_admin
+  #     - net_raw
+  #   restart: unless-stopped
     
-  iperf3:
-    image: networkstatic/iperf3
-    container_name: iperf3
-    command: -s
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - net_admin
-      - net_raw
-    network_mode: host
-    restart: unless-stopped
+  # iperf3:
+  #   image: networkstatic/iperf3
+  #   container_name: iperf3
+  #   command: -s
+  #   devices:
+  #     - /dev/net/tun:/dev/net/tun
+  #   cap_add:
+  #     - net_admin
+  #     - net_raw
+  #   network_mode: host
+  #   restart: unless-stopped
 
 
 
@@ -115,10 +115,9 @@ services:
 
 
 
-networks:
-  proxy_network:
-    external: true
+# networks:
+#   proxy_network:
+#     external: true
   # cloudflared_default:
   #   external: true
-
 
