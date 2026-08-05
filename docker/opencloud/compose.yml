@@ -2,12 +2,13 @@ version: "3.8"
 
 services:
   opencloud:
-    image: opencloudeu/opencloud-rolling
+    image: opencloudeu/opencloud-rolling:latest
     container_name: opencloud
     user: "0:0"
 
-    entrypoint: ["/bin/sh"]
-    command: ["-c", "opencloud init || true; opencloud server"]
+    entrypoint: [ "/bin/sh" ]
+    command: [ "-c", "opencloud init || true; opencloud server" ]
+    # command: ["-c", "while true; do sleep 3600; done || opencloud init || true; opencloud server"]
 
     environment:
       OC_URL: https://opencloud.ismola.dev
@@ -20,7 +21,7 @@ services:
 
       PROXY_ENABLE_BASIC_AUTH: "false"
       IDM_CREATE_DEMO_USERS: "false"
-      IDM_ADMIN_PASSWORD: "admin"
+      # IDM_ADMIN_PASSWORD: "admin"
 
       FRONTEND_ARCHIVER_MAX_SIZE: "10000000000000"
       FRONTEND_CHECK_FOR_UPDATES: "true"
@@ -37,18 +38,29 @@ services:
 
       OC_DEFAULT_LANGUAGE: en
 
+      OC_ADD_RUN_SERVICES: "notifications"
+
+      # email server (if configured)
+      NOTIFICATIONS_SMTP_HOST: "${SMTP_HOST}"
+      NOTIFICATIONS_SMTP_PORT: "${SMTP_PORT}"
+      NOTIFICATIONS_SMTP_SENDER: "${SMTP_SENDER:-OpenCloud Notifications <notifications@cloud.opencloud.test>}"
+      NOTIFICATIONS_SMTP_USERNAME: "${SMTP_USERNAME}"
+      NOTIFICATIONS_SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      NOTIFICATIONS_SMTP_INSECURE: "${SMTP_INSECURE:-false}"
+      NOTIFICATIONS_SMTP_AUTHENTICATION: "${SMTP_AUTHENTICATION}"
+      NOTIFICATIONS_SMTP_ENCRYPTION: "${SMTP_TRANSPORT_ENCRYPTION:-none}"
+      # PROXY_CSP_CONFIG_FILE_LOCATION: /etc/opencloud/csp.yaml
+
+      # enable to allow using the banned passwords list
+      # OC_PASSWORD_POLICY_BANNED_PASSWORDS_LIST: banned-password-list.txt
+
     volumes:
       - /volume1/docker/opencloud/config:/etc/opencloud
       - /volume1/Archivos/opencloud:/var/lib/opencloud
 
-    restart: always
+    restart: unless-stopped
+
     expose:
       - "9200"
     ports:
       - '9200:9200'
-    networks:
-      - cloudflared_default
-
-networks:
-  cloudflared_default:
-    external: true

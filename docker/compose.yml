@@ -4,3 +4,4 @@ include:
   - path: ./networking/compose.yml
   - path: ./watchtower/compose.yml
   - path: ./immich/compose.yml
+  - path: ./opencloud/compose.yml
