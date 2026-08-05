@@ -16,7 +16,7 @@ services:
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
       - TZ=${GENERIC_TIMEZONE}
     volumes:
-      - /volume1/docker/n8n:/home/node/.n8n  # <-- bind mount a volume1
+      - ${DOCKER_PATH}/n8n:/home/node/.n8n  # <-- bind mount a volume1
       - /volume1:/volume1
       - /volume2:/volume2
 

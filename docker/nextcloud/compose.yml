@@ -12,7 +12,7 @@ services:
       MYSQL_USER: nextcloud
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - /volume1/docker/nextcloud/db:/var/lib/mysql
+      - ${DOCKER_PATH}/nextcloud/db:/var/lib/mysql
     networks:
       - backend
 
@@ -35,8 +35,8 @@ services:
       PGID: 10
       TZ: Europe/Madrid
     volumes:
-      - /volume1/docker/nextcloud/config:/config
-      - /volume1/Archivos/nextcloud:/data
+      - ${DOCKER_PATH}/nextcloud/config:/config
+      - ${FILES_PATH}/nextcloud:/data
     ports:
       - "8080:443"
     networks:

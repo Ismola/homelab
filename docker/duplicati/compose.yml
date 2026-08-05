@@ -9,9 +9,8 @@ services:
       - TZ=Europe/Madrid
       - SETTINGS_ENCRYPTION_KEY=${SETTINGS_ENCRYPTION_KEY}
       - CLI_ARGS= #optional
-      - DUPLICATI__WEBSERVICE_PASSWORD=${DUPLICATI__WEBSERVICE_PASSWORD}
     volumes:
-      - /volume1/docker/duplicati/config:/config
+      - ${DOCKER_PATH}/duplicati/config:/config
       - /mnt/@usb/sda1/Volumen1/backups:/backups
       - /volume1:/source
     ports:

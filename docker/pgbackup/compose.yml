@@ -2,7 +2,7 @@ version: "3.8"
 
 x-common:
   database: &db-environment
-    POSTGRES_DB: h0
+    POSTGRES_DB: ${DAVINCI_DB}
     POSTGRES_USER: ${POSTGRES_USER}
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     TZ: Europe/Madrid
@@ -20,34 +20,34 @@ x-common:
 
 services:
   # 1. El "Sidecar" de Tailscale: Actúa como la tarjeta de red para Postgres
-  ts-postgres:
-    image: tailscale/tailscale:latest
-    container_name: ts_resolve_db
-    hostname: resolve-db  # <--- Este será el nombre que pongas en DaVinci Resolve
-    environment:
-      - TS_AUTHKEY=tskey-auth-kS84nc9eiK11CNTRL-YnU4qdReCg16KEQ1wYUwf1FP46e3Thxqi
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=false
-    volumes:      
-      - ${DOCKER_PATH}/davinci/tailscale/state:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - net_admin
-    restart: unless-stopped
+  # ts-postgres:
+  #   image: tailscale/tailscale:latest
+  #   container_name: ts_resolve_db
+  #   hostname: resolve-db  # <--- Este será el nombre que pongas en DaVinci Resolve
+  #   environment:
+  #     - TS_AUTHKEY=tskey-auth-kS84nc9eiK11CNTRL-YnU4qdReCg16KEQ1wYUwf1FP46e3Thxqi
+  #     - TS_STATE_DIR=/var/lib/tailscale
+  #     - TS_USERSPACE=false
+  #   volumes:      
+  #     - ${DOCKER_PATH}/davinci/tailscale/state:/var/lib/tailscale
+  #     - /dev/net/tun:/dev/net/tun
+  #   cap_add:
+  #     - net_admin
+  #   restart: unless-stopped
 
   # 2. El servidor PostgreSQL
-  postgres:
-    user: "0:0"
-    container_name: resolve_pgsql
-    image: postgres:13
-    restart: unless-stopped
-    network_mode: "service:ts-postgres" # <--- Usa la red de Tailscale
-    environment:
-      <<: [*db-environment]
-    volumes:
-      - ${DOCKER_PATH}/davinci/db:/var/lib/postgresql/data
-    depends_on:
-      - ts-postgres
+  # postgres:
+  #   user: "0:0"
+  #   container_name: resolve_pgsql
+  #   image: postgres:13
+  #   restart: unless-stopped
+  #   network_mode: "service:ts-postgres" # <--- Usa la red de Tailscale
+  #   environment:
+  #     <<: [*db-environment]
+  #   volumes:
+  #     - ${DOCKER_PATH}/davinci/db:/var/lib/postgresql/data
+  #   depends_on:
+  #     - ts-postgres
 
   # 3. El servicio de Backups
   pgbackups:
@@ -56,14 +56,14 @@ services:
     image: prodrigestivill/postgres-backup-local:13
     
     restart: unless-stopped
-    network_mode: "service:ts-postgres" # <--- También en la misma red
+    # network_mode: "service:ts-postgres" # <--- También en la misma red
     volumes:
       - "/volume1/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4 Archives/Backup/DaVinci/Automatic:/backups"
-    depends_on:
-      - postgres
+    # depends_on:
+    #   - postgres
     environment:
       <<: [*db-environment, *backup-environment]
-      POSTGRES_HOST: localhost # Al estar en la misma red, es localhost
+      POSTGRES_HOST: ${POSTGRES_HOST}  # Al estar en la misma red, es localhost
       POSTGRES_EXTRA_OPTS: --blobs --format=custom --quote-all-identifiers
       BACKUP_SUFFIX: .backup
       BACKUP_ON_START: true

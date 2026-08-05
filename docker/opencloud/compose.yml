@@ -55,8 +55,8 @@ services:
       # OC_PASSWORD_POLICY_BANNED_PASSWORDS_LIST: banned-password-list.txt
 
     volumes:
-      - /volume1/docker/opencloud/config:/etc/opencloud
-      - /volume1/Archivos/opencloud:/var/lib/opencloud
+      - ${DOCKER_PATH}/opencloud/config:/etc/opencloud
+      - ${FILES_PATH}/opencloud:/var/lib/opencloud
 
     restart: unless-stopped
 

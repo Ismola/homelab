@@ -5,3 +5,6 @@ include:
   - path: ./watchtower/compose.yml
   - path: ./immich/compose.yml
   - path: ./opencloud/compose.yml
+  - path: ./duplicati/compose.yml
+  - path: ./gickup/compose.yml
+  - path: ./pgbackup/compose.yml
