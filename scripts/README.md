@@ -13,6 +13,26 @@ Los cambios deben estar publicados en `main` antes de ejecutar un comando.
 Conviene abrir y revisar el script antes de enviarlo directamente a `bash`,
 especialmente los scripts de mantenimiento.
 
+## Documentación
+
+### `docs/generate-inventory-diagram.py`
+
+Lee los hosts, roles y proveedores de `ansible/inventory/inventory.yml`, los
+stacks incluidos en `docker/compose.yml` y las aplicaciones seleccionadas por
+`gitops/applicationset/argocd.yaml`. Con esos datos regenera el diagrama de
+infraestructura delimitado por marcadores en el README principal. GitHub
+Actions lo ejecuta automáticamente en cada push.
+
+```bash
+python3 scripts/docs/generate-inventory-diagram.py
+```
+
+Para comprobar que el README está sincronizado sin modificarlo:
+
+```bash
+python3 scripts/docs/generate-inventory-diagram.py --check
+```
+
 ## K3s
 
 ### `k3s/sync-node-capabilities.bash`

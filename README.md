@@ -23,6 +23,7 @@ Homelab híbrido con servicios públicos y privados, almacenamiento y cómputo l
 
 La idea, es aprovechar la capa gratuita de los distintos proveedores de nube y usar infraestructura local, para obtener un entorno de desarrollo y pruebas con alta disponibilidad y tolerancia a fallos, sin depender de un único proveedor ni de una única red física y lo más económico posible.
 
+<!-- inventory-diagram:start -->
 ```mermaid
 flowchart TB
     client["Clientes"]
@@ -33,37 +34,111 @@ flowchart TB
     longhorn[("Longhorn<br/>Persistent Volumes")]
     databases[("PostgreSQL · MongoDB")]
 
-    subgraph home["Homelab"]
-        h0["h0 · NAS<br/>Docker workloads<br/>Pi-hole · NPM"]
-        homeNodes["Nodos K3s locales"]
+    subgraph provider_homelab["Homelab"]
+        docker_h0["h0 · NAS<br/>Docker workloads"]
+        k3s_rpi["rpi<br/>K3s server / worker"]
     end
 
-    subgraph cloud["Cloud"]
-        servers["K3s servers"]
-        agents["K3s agents"]
+    subgraph provider_google["Google Cloud"]
+        k3s_v4["v4<br/>K3s agent / worker"]
+    end
+
+    subgraph provider_oracle["Oracle Cloud"]
+        k3s_v3["v3<br/>K3s server / worker"]
+        k3s_v7["v7<br/>K3s server / worker"]
+        k3s_instance_20240424_2202["instance-20240424-2202<br/>K3s agent / worker"]
+        k3s_v2["v2<br/>K3s agent / worker"]
+        k3s_v5["v5<br/>K3s agent / worker"]
+        k3s_v6["v6<br/>K3s agent / worker"]
+    end
+
+    subgraph docker_deployments["Docker Compose · h0"]
+        compose_cloudflare["cloudflare<br/>cloudflared"]
+        compose_media["media<br/>qbittorrent · jackett · radarr · sonarr · bazarr · prowlarr · plex · seerr · qbit_manage"]
+        compose_networking["networking<br/>pihole · npm"]
+        compose_watchtower["watchtower<br/>watchtower"]
+        compose_immich["immich<br/>immich-server · immich-machine-learning · redis · database"]
+        compose_opencloud["opencloud<br/>opencloud"]
+        compose_duplicati["duplicati<br/>duplicati"]
+        compose_gickup["gickup<br/>gickup"]
+        compose_pgbackup["pgbackup<br/>pgbackups"]
+    end
+
+    subgraph k3s_deployments["Aplicaciones GitOps · K3s"]
+        gitops_african_art_exhibition_concept["african-art-exhibition-concept"]
+        gitops_apple_concept["apple-concept"]
+        gitops_argocd["argocd"]
+        gitops_argocd_image_updater["argocd-image-updater"]
+        gitops_cakeshop_concept["cakeshop-concept"]
+        gitops_calendar_subscription_hub["calendar-subscription-hub"]
+        gitops_cloudflare["cloudflare"]
+        gitops_cluster_priorities["cluster-priorities"]
+        gitops_gateway_api_crds["gateway-api-crds"]
+        gitops_gateway_system["gateway-system"]
+        gitops_gott_calculator["gott-calculator"]
+        gitops_headlamp["headlamp"]
+        gitops_homepage["homepage"]
+        gitops_japon_landing_concept["japon-landing-concept"]
+        gitops_js_snake["js-snake"]
+        gitops_jw_hitster["jw-hitster"]
+        gitops_longhorn["longhorn"]
+        gitops_mongodb["mongodb"]
+        gitops_monitoring["monitoring"]
+        gitops_open_date["open-date"]
+        gitops_portfolio["portfolio"]
+        gitops_postgres["postgres"]
+        gitops_pro_login_animacion["pro-login-animacion"]
+        gitops_sj_wedding["sj-wedding"]
+        gitops_tailscale["tailscale"]
+        gitops_template_next["template-next"]
+        gitops_trivial_php["trivial-php"]
+        gitops_zip_hider["zip-hider"]
     end
 
     client -->|"servicios públicos"| internet
-    internet --> h0
     internet --> workloads
     client -->|"acceso privado / Split DNS"| tailnet
-    tailnet --- h0
-    tailnet --- homeNodes
-    tailnet --- servers
-    tailnet --- agents
-    servers ---|"K3s sobre tailscale0"| agents
-    servers --- homeNodes
-    servers -.-> workloads
-    agents -.-> workloads
-    homeNodes -.-> workloads
+    internet --> docker_h0
+    tailnet --- docker_h0
+    docker_h0 --> docker_deployments
+    tailnet --- k3s_v3
+    k3s_v3 -.-> workloads
+    tailnet --- k3s_v7
+    k3s_v7 -.-> workloads
+    tailnet --- k3s_rpi
+    k3s_rpi -.-> workloads
+    tailnet --- k3s_instance_20240424_2202
+    k3s_instance_20240424_2202 -.-> workloads
+    tailnet --- k3s_v2
+    k3s_v2 -.-> workloads
+    tailnet --- k3s_v4
+    k3s_v4 -.-> workloads
+    tailnet --- k3s_v5
+    k3s_v5 -.-> workloads
+    tailnet --- k3s_v6
+    k3s_v6 -.-> workloads
+    workloads --> k3s_deployments
     workloads --> databases
     databases --> longhorn
     workloads -->|"API S3"| r2
 ```
+<!-- inventory-diagram:end -->
 
 ## Infraestructura
 
 Inventario: [`ansible/inventory/inventory.yml`](ansible/inventory/inventory.yml)
+
+El diagrama de la vista general se genera desde este inventario, los stacks
+incluidos en [`docker/compose.yml`](docker/compose.yml) y las aplicaciones
+seleccionadas por el
+[`ApplicationSet`](gitops/applicationset/argocd.yaml). El workflow
+[`update-inventory-diagram.yml`](.github/workflows/update-inventory-diagram.yml)
+lo actualiza y crea un commit automáticamente en cada push si cambian los
+nodos o los servicios desplegados. También puede regenerarse localmente con:
+
+```bash
+python3 scripts/docs/generate-inventory-diagram.py
+```
 
 ### Capacidades de los nodos
 
