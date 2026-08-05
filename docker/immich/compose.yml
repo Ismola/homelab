@@ -11,9 +11,9 @@ services:
     environment:
       DB_HOSTNAME: database
       DB_PORT: 5432
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_DATABASE_NAME: ${DB_DATABASE_NAME}
+      DB_USERNAME: ${DB_IMMICH_USERNAME}
+      DB_PASSWORD: ${DB_IMMICH_PASSWORD}
+      DB_DATABASE_NAME: ${DB_IMMICH_DATABASE_NAME}
       REDIS_HOSTNAME: redis
 
     ports:
