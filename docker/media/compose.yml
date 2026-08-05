@@ -2,7 +2,7 @@ x-common-env: &common-env
   PUID: 1000
   PGID: 10
   TZ: Europe/Madrid
-  UMASK: 002
+  UMASK: 2
   VERSION: docker
   WEBUI_PORT: 8585
 
@@ -25,9 +25,6 @@ services:
       - 6881:6881/udp
       - 8585:8585
     restart: unless-stopped
-    networks:
-      - media
-      - cloudflared_default
 
   jackett:
     image: linuxserver/jackett:latest
@@ -39,8 +36,6 @@ services:
     ports:
       - 9117:9117
     restart: unless-stopped
-    networks:
-      - media
 
   radarr:
     image: ghcr.io/hotio/radarr:latest
@@ -52,8 +47,6 @@ services:
     volumes:
       - ${DOCKER_PATH}/radarr:/config
       - ${MEDIA_PATH}:/media
-    networks:
-      - media
     depends_on:
       - qbittorrent
       - jackett
@@ -68,8 +61,6 @@ services:
     volumes:
       - ${DOCKER_PATH}/sonarr:/config
       - ${MEDIA_PATH}:/media
-    networks:
-      - media
     depends_on:
       - qbittorrent
       - jackett
@@ -84,8 +75,6 @@ services:
     volumes:
       - ${DOCKER_PATH}/bazarr:/config
       - ${MEDIA_PATH}:/media
-    networks:
-      - media
     depends_on:
       - radarr
       - sonarr
@@ -100,8 +89,6 @@ services:
     volumes:
       - ${DOCKER_PATH}/prowlarr:/config
       - ${MEDIA_PATH}:/media
-    networks:
-      - media
     depends_on:
       - jackett
 
@@ -118,9 +105,6 @@ services:
     ports:
       - "32400:32400"
     restart: unless-stopped
-    networks:
-      - media
-      - cloudflared_default
 
   seerr:
     image: ghcr.io/hotio/seerr:latest
@@ -132,8 +116,6 @@ services:
     volumes:
       - ${DOCKER_PATH}/seerr:/config
       - ${MEDIA_PATH}:/media
-    networks:
-      - media
 
   qbit_manage:
     image: bobokun/qbit_manage:latest
@@ -150,17 +132,8 @@ services:
       - ${MEDIA_PATH}:/media
       - ${MEDIA_PATH}/recycle_bin:/recycle_bin
     restart: unless-stopped
-    networks:
-      - media
+
     depends_on:
       - qbittorrent
     ports:
-        - "8181:8181"
-
-
-networks:
-  media:
-    name: proxy_network
-
-  cloudflared_default:
-    external: true
+      - "8181:8181"
