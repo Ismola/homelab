@@ -109,11 +109,11 @@ data:
                 href: https://login.tailscale.com/admin/machines
             - Nginx Proxy Manager:
                 icon: nginx-proxy-manager.png
-                href: http://h0:81
+                href: http://npm.ismola.dev
                 description: Proxy inverso y certificados
             - Pi-hole:
                 icon: pi-hole.png
-                href: http://h0:8080/admin
+                href: http://pihole.ismola.dev/admin
                 description: DNS y bloqueo de publicidad
             - Router:
                 icon: mdi-router-wireless
