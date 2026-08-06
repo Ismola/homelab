@@ -40,7 +40,7 @@ data:
                 description: Métricas y observabilidad
             - Portainer:
                 icon: portainer.png
-                href: http://h0:9000
+                href: http://portainer.ismola.dev
                 description: Administración de contenedores Docker
             - UGos:
                 icon: openmediavault.png
@@ -72,35 +72,35 @@ data:
                 description: Biblioteca multimedia
             - Overseerr:
                 icon: overseerr.png
-                href: http://h0:5055
+                href: https://seerr.ismola.dev
                 description: Solicitudes multimedia
             - Sonarr:
                 icon: sonarr.png
-                href: http://h0:8989
+                href: https://sonarr.ismola.dev
                 description: Gestión de series
             - Radarr:
                 icon: radarr.png
-                href: http://h0:7878
+                href: https://radarr.ismola.dev
                 description: Gestión de películas
             - Bazarr:
                 icon: bazarr.png
-                href: http://h0:6767
+                href: https://bazarr.ismola.dev
                 description: Gestión de subtítulos
             - Prowlarr:
                 icon: prowlarr.png
-                href: http://h0:9696
+                href: https://prowlarr.ismola.dev
                 description: Gestión de indexadores
             - Jackett:
                 icon: jackett.png
-                href: http://h0:9117
+                href: https://jackett.ismola.dev
                 description: Proxy de indexadores
             - qBittorrent:
                 icon: qbittorrent.png
-                href: http://h0:8585
+                href: https://qbittorrent.ismola.dev
                 description: Cliente BitTorrent
             - qBitManager:
                 icon: mdi-download-network-outline
-                href: http://h0:8181
+                href: https://qbitmanage.ismola.dev
                 description: Automatización de qBittorrent
 
         - Networking:
@@ -141,7 +141,7 @@ data:
                 description: Fotos y vídeos
             - Duplicati:
                 icon: duplicati.png
-                href: http://h0:8200
+                href: https://duplicati.ismola.dev
                 description: Copias de seguridad
 
 
