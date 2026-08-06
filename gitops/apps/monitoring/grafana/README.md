@@ -5,7 +5,7 @@ de datos o en ConfigMaps generados en el clúster.
 
 ## Qué gestiona cada mecanismo
 
-- `dashboards/`: los 28 dashboards y sus tres carpetas, en formato CRD de
+- `dashboards/`: los dashboards y sus carpetas, en formato CRD de
   Grafana. Grafana 13 los sincroniza desde Git con su Git Sync nativo.
 - `git-sync/repository.json`: conexión de sólo lectura a la rama `main` y a la
   carpeta de dashboards de este repositorio.
@@ -14,6 +14,14 @@ de datos o en ConfigMaps generados en el clúster.
 - Las 134 reglas de alerta y 85 recording rules actuales pertenecen a
   `kube-prometheus-stack`; se generan de forma declarativa desde la dependencia
   vendorizada y las opciones `defaultRules` de `values.yaml`.
+- Las reglas propias de Grafana, incluido el error de sincronización de Calendar
+  Subscription Hub y la disponibilidad de páginas públicas, se provisionan en
+  `grafana.alerting.rules.yaml` dentro de `../values.yaml`.
+
+El endpoint `/api/metrics` de Calendar Subscription Hub se descubre mediante un
+`ServiceMonitor`. Las páginas publicadas por el Gateway se comprueban desde
+fuera del clúster con Blackbox Exporter y un recurso `Probe`, atravesando DNS,
+TLS, Cloudflare Tunnel y el servicio de origen.
 
 Grafana Git Sync sólo soporta dashboards y carpetas. Alertas, datasources,
 contact points y otros recursos todavía necesitan el provisioning clásico o

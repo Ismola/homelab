@@ -286,6 +286,8 @@ metadata:
   namespace: calendar-subscription-hub
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app: calendar-subscription-hub-web
 spec:
   type: ClusterIP
   selector:

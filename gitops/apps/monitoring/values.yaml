@@ -1,3 +1,27 @@
+publicEndpoints:
+  - https://african-art-exhibition-concept.ismola.dev
+  - https://apple-concept.ismola.dev
+  - https://argocd.ismola.dev
+  - https://cakeshop-concept.ismola.dev
+  - https://calendar-subscription-hub.ismola.dev
+  - https://gott-calculator.ismola.dev
+  - https://grafana.ismola.dev
+  - https://headlamp.ismola.dev
+  - https://homepage.ismola.dev
+  - https://ismola.dev
+  - https://japon-landing-concept.ismola.dev
+  - https://js-snake.ismola.dev
+  - https://jw-hitster.ismola.dev
+  - https://longhorn.ismola.dev
+  - https://mongo-express.ismola.dev
+  - https://open-date.ismola.dev
+  - https://pgadmin.ismola.dev
+  - https://pro-login-animacion.ismola.dev
+  - https://sj-wedding.ismola.dev
+  - https://template-next.ismola.dev
+  - https://trivial-php.ismola.dev
+  - https://zip-hider.ismola.dev
+
 kube-prometheus-stack:
   crds:
     enabled: true
@@ -113,6 +137,161 @@ kube-prometheus-stack:
             group_wait: 2m
             group_interval: 15m
             repeat_interval: 12h
+      rules.yaml:
+        apiVersion: 1
+        groups:
+          - orgId: 1
+            name: calendar-subscription-hub
+            folder: Homelab Alerts
+            interval: 1m
+            rules:
+              - uid: calendar-sync-errors
+                title: Calendar Subscription Hub sync error
+                condition: C
+                data:
+                  - refId: A
+                    datasourceUid: prometheus
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    model:
+                      datasource:
+                        type: prometheus
+                        uid: prometheus
+                      editorMode: code
+                      expr: sum by (provider) (calendar_subscription_hub_subscriptions{sync_status="ERROR"})
+                      instant: true
+                      intervalMs: 1000
+                      legendFormat: __auto
+                      maxDataPoints: 43200
+                      range: false
+                      refId: A
+                  - refId: B
+                    datasourceUid: __expr__
+                    relativeTimeRange:
+                      from: 0
+                      to: 0
+                    model:
+                      conditions: []
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                      expression: A
+                      reducer: last
+                      refId: B
+                      type: reduce
+                  - refId: C
+                    datasourceUid: __expr__
+                    relativeTimeRange:
+                      from: 0
+                      to: 0
+                    model:
+                      conditions:
+                        - evaluator:
+                            params:
+                              - 0
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                              - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                      expression: B
+                      refId: C
+                      type: threshold
+                noDataState: OK
+                execErrState: Error
+                for: 2m
+                annotations:
+                  summary: Calendar Subscription Hub has a subscription in sync error state
+                  description: At least one subscription has remained in ERROR state for two minutes.
+                labels:
+                  severity: warning
+                  service: calendar-subscription-hub
+                isPaused: false
+          - orgId: 1
+            name: cloudflare-public-pages
+            folder: Homelab Alerts
+            interval: 1m
+            rules:
+              - uid: cloudflare-page-unavailable
+                title: Public page unavailable through Cloudflare
+                condition: C
+                data:
+                  - refId: A
+                    datasourceUid: prometheus
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    model:
+                      datasource:
+                        type: prometheus
+                        uid: prometheus
+                      editorMode: code
+                      expr: probe_success{job="probe/monitoring/cloudflare-public-pages"}
+                      instant: true
+                      intervalMs: 1000
+                      legendFormat: __auto
+                      maxDataPoints: 43200
+                      range: false
+                      refId: A
+                  - refId: B
+                    datasourceUid: __expr__
+                    relativeTimeRange:
+                      from: 0
+                      to: 0
+                    model:
+                      conditions: []
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                      expression: A
+                      reducer: last
+                      refId: B
+                      type: reduce
+                  - refId: C
+                    datasourceUid: __expr__
+                    relativeTimeRange:
+                      from: 0
+                      to: 0
+                    model:
+                      conditions:
+                        - evaluator:
+                            params:
+                              - 1
+                            type: lt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                              - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                      expression: B
+                      refId: C
+                      type: threshold
+                noDataState: Alerting
+                execErrState: Error
+                for: 3m
+                annotations:
+                  summary: A public page is unavailable through Cloudflare
+                  description: An external HTTPS probe has failed for three minutes.
+                labels:
+                  severity: critical
+                  service: cloudflare-tunnel
+                isPaused: false
 
     # Mantener temporalmente un provider vacío con el nombre anterior hace que
     # Grafana retire de forma limpia los dashboards provisionados por ConfigMap.
