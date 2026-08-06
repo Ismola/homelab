@@ -155,11 +155,6 @@ spec:
 
     - namePattern: "headlamp"
       useAnnotations: false
-      writeBackConfig:
-        method: git
-        gitConfig:
-          branch: main
-          writeBackTarget: kustomization
       images:
         - alias: headlamp
           imageName: ghcr.io/headlamp-k8s/headlamp
