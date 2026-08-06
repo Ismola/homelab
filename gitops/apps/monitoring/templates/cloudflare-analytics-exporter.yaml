@@ -1,0 +1,117 @@
+{{- if .Values.cloudflareAnalytics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflare-analytics-exporter
+  namespace: {{ .Release.Namespace }}
+data:
+  exporter.py: |
+{{ .Files.Get "files/cloudflare-analytics-exporter.py" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-analytics-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: cloudflare-analytics-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflare-analytics-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudflare-analytics-exporter
+    spec:
+      nodeSelector:
+        capability.isma.dev/stable: "true"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          image: {{ .Values.cloudflareAnalytics.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/exporter.py"]
+          env:
+            - name: REFRESH_INTERVAL_SECONDS
+              value: {{ .Values.cloudflareAnalytics.refreshIntervalSeconds | quote }}
+            - name: PUBLIC_ENDPOINTS
+              value: {{ join "," .Values.publicEndpoints | quote }}
+          ports:
+            - name: metrics
+              containerPort: 9101
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+{{ toYaml .Values.cloudflareAnalytics.resources | indent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: exporter
+              mountPath: /app
+              readOnly: true
+            - name: credentials
+              mountPath: /var/run/secrets/cloudflare
+              readOnly: true
+      volumes:
+        - name: exporter
+          configMap:
+            name: cloudflare-analytics-exporter
+            defaultMode: 0555
+        - name: credentials
+          secret:
+            secretName: {{ .Values.cloudflareAnalytics.secretName }}
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflare-analytics-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: cloudflare-analytics-exporter
+spec:
+  selector:
+    app.kubernetes.io/name: cloudflare-analytics-exporter
+  ports:
+    - name: metrics
+      port: 9101
+      targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cloudflare-analytics-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    release: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflare-analytics-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+      scrapeTimeout: 10s
+{{- end }}

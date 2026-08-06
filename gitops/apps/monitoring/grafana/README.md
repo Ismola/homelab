@@ -24,6 +24,33 @@ El endpoint `/api/metrics` de Calendar Subscription Hub se descubre mediante un
 fuera del clúster con Blackbox Exporter y un recurso `Probe`, atravesando DNS,
 TLS, Cloudflare Tunnel y el servicio de origen.
 
+## Cloudflare Analytics
+
+El dashboard `Cloudflare Analytics` obtiene solicitudes, visitas estimadas,
+transferencia y países desde GraphQL y las publica en Prometheus mediante el
+exporter del chart. No usa dashboards ni plugins de Grafana Cloud.
+
+Las credenciales no se almacenan en Git. Hay que crear un token limitado a la
+zona con `Zone > Analytics > Read` y entregar el token y el Zone ID mediante:
+
+```bash
+kubectl --namespace monitoring create secret generic cloudflare-analytics \
+  --from-literal=api-token='<CLOUDFLARE_API_TOKEN>' \
+  --from-literal=zone-id='<CLOUDFLARE_ZONE_ID>' \
+  --dry-run=client --output=yaml | kubectl apply --filename=-
+```
+
+El volumen del Secret es opcional para que Argo CD pueda desplegar antes de que
+existan las credenciales. El exporter las detectará automáticamente cuando
+Kubernetes actualice el volumen. `cloudflare_analytics_up` valdrá `0` si faltan
+o si Cloudflare Free no habilita el dataset para la zona; el mensaje concreto
+estará disponible en `cloudflare_analytics_last_error_info`.
+
+La métrica `visits` no representa personas únicas: Cloudflare define una visita
+como una carga de página iniciada desde un enlace directo o un referente
+externo. Se usa porque el dataset moderno no ofrece visitantes únicos por
+hostname.
+
 Grafana Git Sync sólo soporta dashboards y carpetas. Alertas, datasources,
 contact points y otros recursos todavía necesitan el provisioning clásico o
 el chart de Helm. Consulta la [matriz de compatibilidad de Git Sync](https://grafana.com/docs/grafana/latest/as-code/observability-as-code/git-sync/usage-limits/#resource-support-and-compatibility).

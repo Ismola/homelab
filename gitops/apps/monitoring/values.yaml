@@ -22,6 +22,22 @@ publicEndpoints:
   - https://trivial-php.ismola.dev
   - https://zip-hider.ismola.dev
 
+# Cloudflare Free no garantiza todas las métricas de Analytics por API. El
+# exporter mantiene el dashboard operativo y expone cloudflare_analytics_up=0
+# cuando el token, la zona o el dataset no están disponibles.
+cloudflareAnalytics:
+  enabled: true
+  secretName: cloudflare-analytics
+  refreshIntervalSeconds: 900
+  image: python:3.13-alpine
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 96Mi
+
 kube-prometheus-stack:
   crds:
     enabled: true
