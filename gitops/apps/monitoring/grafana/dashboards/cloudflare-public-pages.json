@@ -83,7 +83,7 @@
         "targets": [
           {
             "editorMode": "code",
-            "expr": "100 * avg(probe_success{job=\"probe/monitoring/cloudflare-public-pages\"})",
+            "expr": "100 * avg(probe_success{job=\"cloudflare-public-pages\"})",
             "instant": true,
             "legendFormat": "__auto",
             "range": false,
@@ -145,7 +145,7 @@
         "targets": [
           {
             "editorMode": "code",
-            "expr": "count(probe_success{job=\"probe/monitoring/cloudflare-public-pages\"} == 0) or vector(0)",
+            "expr": "count(probe_success{job=\"cloudflare-public-pages\"} == 0) or vector(0)",
             "instant": true,
             "legendFormat": "__auto",
             "range": false,
@@ -212,7 +212,7 @@
         "targets": [
           {
             "editorMode": "code",
-            "expr": "min((probe_ssl_earliest_cert_expiry{job=\"probe/monitoring/cloudflare-public-pages\"} - time()) / 86400)",
+            "expr": "min((probe_ssl_earliest_cert_expiry{job=\"cloudflare-public-pages\"} - time()) / 86400)",
             "instant": true,
             "legendFormat": "__auto",
             "range": false,
@@ -320,7 +320,7 @@
         "targets": [
           {
             "editorMode": "code",
-            "expr": "probe_success{job=\"probe/monitoring/cloudflare-public-pages\"}",
+            "expr": "probe_success{job=\"cloudflare-public-pages\"}",
             "instant": false,
             "legendFormat": "{{instance}}",
             "range": true,
@@ -410,7 +410,7 @@
         "targets": [
           {
             "editorMode": "code",
-            "expr": "probe_duration_seconds{job=\"probe/monitoring/cloudflare-public-pages\"}",
+            "expr": "probe_duration_seconds{job=\"cloudflare-public-pages\"}",
             "instant": false,
             "legendFormat": "{{instance}}",
             "range": true,

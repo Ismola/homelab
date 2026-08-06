@@ -235,7 +235,7 @@ kube-prometheus-stack:
                         type: prometheus
                         uid: prometheus
                       editorMode: code
-                      expr: probe_success{job="probe/monitoring/cloudflare-public-pages"}
+                      expr: probe_success{job="cloudflare-public-pages"}
                       instant: true
                       intervalMs: 1000
                       legendFormat: __auto
