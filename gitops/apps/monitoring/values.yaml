@@ -216,6 +216,77 @@ kube-prometheus-stack:
                   severity: warning
                   service: calendar-subscription-hub
                 isPaused: false
+              - uid: asismetro-high-memory
+                title: Asismetro Automations high memory usage
+                condition: C
+                data:
+                  - refId: A
+                    datasourceUid: prometheus
+                    relativeTimeRange:
+                      from: 600
+                      to: 0
+                    model:
+                      datasource:
+                        type: prometheus
+                        uid: prometheus
+                      editorMode: code
+                      expr: 100 * max by (pod) (container_memory_working_set_bytes{namespace="calendar-subscription-hub",container="asismetro-automations"}) / max by (pod) (kube_pod_container_resource_limits{namespace="calendar-subscription-hub",container="asismetro-automations",resource="memory"})
+                      instant: true
+                      intervalMs: 1000
+                      legendFormat: __auto
+                      maxDataPoints: 43200
+                      range: false
+                      refId: A
+                  - refId: B
+                    datasourceUid: __expr__
+                    relativeTimeRange:
+                      from: 0
+                      to: 0
+                    model:
+                      conditions: []
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                      expression: A
+                      reducer: last
+                      refId: B
+                      type: reduce
+                  - refId: C
+                    datasourceUid: __expr__
+                    relativeTimeRange:
+                      from: 0
+                      to: 0
+                    model:
+                      conditions:
+                        - evaluator:
+                            params:
+                              - 85
+                            type: gt
+                          operator:
+                            type: and
+                          query:
+                            params:
+                              - C
+                          reducer:
+                            params: []
+                            type: last
+                          type: query
+                      datasource:
+                        type: __expr__
+                        uid: __expr__
+                      expression: B
+                      refId: C
+                      type: threshold
+                noDataState: OK
+                execErrState: Error
+                for: 5m
+                annotations:
+                  summary: Asismetro Automations is close to its memory limit
+                  description: An Asismetro Automations pod has used more than 85% of its memory limit for five minutes.
+                labels:
+                  severity: warning
+                  service: asismetro-automations
+                isPaused: false
           - orgId: 1
             name: cloudflare-public-pages
             folder: Homelab Alerts

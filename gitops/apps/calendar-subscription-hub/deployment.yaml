@@ -22,6 +22,7 @@ data:
   APP_BASE_URL: "https://calendar-subscription-hub.ismola.dev"
 
   ASISMETRO_API_BASE_URL: "http://asismetro-automations:3000"
+  ASISMETRO_REQUEST_TIMEOUT_MS: "90000"
 
   APP_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
   SESSION_SECRET: "dev-session-secret"

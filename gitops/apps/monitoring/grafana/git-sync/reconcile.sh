@@ -11,6 +11,23 @@ until curl -fsS "$api/api/health" >/dev/null; do
   sleep 2
 done
 
+ensure_alert_rules() {
+  missing=false
+
+  for rule_uid in calendar-sync-errors cloudflare-page-unavailable asismetro-high-memory; do
+    if ! curl -fsS -u "$auth" \
+      "$api/api/v1/provisioning/alert-rules/$rule_uid" >/dev/null; then
+      missing=true
+    fi
+  done
+
+  if [ "$missing" = "true" ]; then
+    curl -fsS -u "$auth" -X POST \
+      "$api/api/admin/provisioning/alerting/reload" >/dev/null
+    echo "Grafana alerting provisioning reloaded"
+  fi
+}
+
 while true; do
   status="$(
     curl -sS -u "$auth" -o /tmp/repository.json -w '%{http_code}' \
@@ -51,6 +68,11 @@ while true; do
   else
     echo "Unexpected Grafana repository API status: $status" >&2
   fi
+
+  # El provisioning por fichero se aplica al arrancar, pero una carpeta de
+  # alertas borrada desde la UI elimina también sus reglas. Volver a cargarlo
+  # únicamente cuando falta alguna regla mantiene Git como fuente de verdad.
+  ensure_alert_rules
 
   sleep 300
 done

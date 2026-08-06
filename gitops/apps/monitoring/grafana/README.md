@@ -15,7 +15,8 @@ de datos o en ConfigMaps generados en el clúster.
   `kube-prometheus-stack`; se generan de forma declarativa desde la dependencia
   vendorizada y las opciones `defaultRules` de `values.yaml`.
 - Las reglas propias de Grafana, incluido el error de sincronización de Calendar
-  Subscription Hub y la disponibilidad de páginas públicas, se provisionan en
+  Subscription Hub, el uso de memoria de Asismetro Automations y la
+  disponibilidad de páginas públicas, se provisionan en
   `grafana.alerting.rules.yaml` dentro de `../values.yaml`.
 
 El endpoint `/api/metrics` de Calendar Subscription Hub se descubre mediante un
@@ -32,7 +33,8 @@ el chart de Helm. Consulta la [matriz de compatibilidad de Git Sync](https://gra
 1. Se cambia un dashboard JSON o la configuración de Helm en este repositorio.
 2. Se hace merge/push a `main`.
 3. Argo CD detecta el commit y sincroniza la aplicación `monitoring`.
-4. El reconciler `git-sync-provisioner` crea o actualiza la conexión en Grafana.
+4. El reconciler `git-sync-provisioner` crea o actualiza la conexión y restaura
+   el provisioning de alertas si falta alguna regla declarada.
 5. Grafana consulta Git cada 60 segundos y aplica los dashboards.
 
 La conexión usa Pure Git sobre HTTPS contra el repositorio público y no guarda
