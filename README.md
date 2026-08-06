@@ -62,6 +62,7 @@ flowchart TB
         compose_duplicati["duplicati<br/>duplicati"]
         compose_gickup["gickup<br/>gickup"]
         compose_pgbackup["pgbackup<br/>pgbackups"]
+        compose_minio["minio<br/>minio"]
     end
 
     subgraph k3s_deployments["Aplicaciones GitOps · K3s"]
@@ -73,6 +74,7 @@ flowchart TB
         gitops_calendar_subscription_hub["calendar-subscription-hub"]
         gitops_cloudflare["cloudflare"]
         gitops_cluster_priorities["cluster-priorities"]
+        gitops_etcd_backup["etcd-backup"]
         gitops_gateway_api_crds["gateway-api-crds"]
         gitops_gateway_system["gateway-system"]
         gitops_gott_calculator["gott-calculator"]
