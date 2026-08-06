@@ -1268,6 +1268,7 @@
     cluster_settle_seconds: 30
     k3s_pod_cidr: 10.42.0.0/16
     k3s_forward_rule_comment: allow-k3s-pod-forwarding
+    k3s_kubelet_metrics_rule_comment: allow-k3s-pods-kubelet-metrics
     k3s_forward_service_name: k3s-pod-forwarding.service
     # Los PVC local-path no pueden moverse mientras su nodo está drenado.
     # Se validan antes del drain y otra vez después del uncordon.
@@ -3308,13 +3309,14 @@
             mode: "0644"
             content: |
               [Unit]
-              Description=Allow K3s pod forwarding
+              Description=Allow K3s pod forwarding and local kubelet metrics
               After={{ k3s_service_name }}.service
               Wants={{ k3s_service_name }}.service
 
               [Service]
               Type=oneshot
               ExecStart=/bin/sh -ec '/usr/sbin/iptables-nft -C FORWARD -s {{ k3s_pod_cidr }} -d {{ k3s_pod_cidr }} -m comment --comment {{ k3s_forward_rule_comment }} -j ACCEPT || /usr/sbin/iptables-nft -I FORWARD 1 -s {{ k3s_pod_cidr }} -d {{ k3s_pod_cidr }} -m comment --comment {{ k3s_forward_rule_comment }} -j ACCEPT'
+              ExecStart=/bin/sh -ec '/usr/sbin/iptables-nft -C INPUT -s {{ k3s_pod_cidr }} -p tcp --dport 10250 -m comment --comment {{ k3s_kubelet_metrics_rule_comment }} -j ACCEPT || /usr/sbin/iptables-nft -I INPUT 1 -s {{ k3s_pod_cidr }} -p tcp --dport 10250 -m comment --comment {{ k3s_kubelet_metrics_rule_comment }} -j ACCEPT'
               RemainAfterExit=yes
 
               [Install]
@@ -3342,6 +3344,26 @@
               - comment
               - --comment
               - "{{ k3s_forward_rule_comment }}"
+              - -j
+              - ACCEPT
+          changed_when: false
+
+        - name: Verificar el acceso de los pods a las métricas del kubelet local
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/iptables-nft
+              - -C
+              - INPUT
+              - -s
+              - "{{ k3s_pod_cidr }}"
+              - -p
+              - tcp
+              - --dport
+              - "10250"
+              - -m
+              - comment
+              - --comment
+              - "{{ k3s_kubelet_metrics_rule_comment }}"
               - -j
               - ACCEPT
           changed_when: false
