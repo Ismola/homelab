@@ -5,7 +5,8 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-      - "8080:80/tcp"
+    expose:
+      - 80
     environment:
       TZ: 'Europe/Madrid'
       FTLCONF_webserver_api_password: ${WEBPASSWORD}
@@ -26,7 +27,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "81:81"
+    expose:
+      - 81
     volumes:
       - ${DOCKER_PATH}/npm/data:/data
       - ${DOCKER_PATH}/npm/letsencrypt:/etc/letsencrypt
@@ -35,89 +37,89 @@ services:
     #   - proxy_network
 
 
-  # tailscale:
-  #   image: tailscale/tailscale:latest
-  #   # network_mode: host
-  #   container_name: tailscale
-  #   hostname: h0
-  #   environment:
-  #     - TS_AUTHKEY=${TS_AUTHKEY}
-  #     - TS_EXTRA_ARGS=--advertise-exit-node --advertise-routes=192.168.1.0/24
-  #     # Esto hace falta para que el splitDNS funcione
-  #     # - TS_USERSPACE=false
-  #     - TS_STATE_DIR=/var/lib/tailscale
-  #     # - TS_TAILSCALED_EXTRA_ARGS=--port=37036
-  #   volumes:
-  #     - ${DOCKER_PATH}/tailscale/state:/var/lib/tailscale
-  #   devices:
-  #     - /dev/net/tun:/dev/net/tun
-  #   cap_add:
-  #     - net_admin
-  #     - net_raw
-  #   restart: unless-stopped
-    
-  # iperf3:
-  #   image: networkstatic/iperf3
-  #   container_name: iperf3
-  #   command: -s
-  #   devices:
-  #     - /dev/net/tun:/dev/net/tun
-  #   cap_add:
-  #     - net_admin
-  #     - net_raw
-  #   network_mode: host
-  #   restart: unless-stopped
+    # tailscale:
+    #   image: tailscale/tailscale:latest
+    #   # network_mode: host
+    #   container_name: tailscale
+    #   hostname: h0
+    #   environment:
+    #     - TS_AUTHKEY=${TS_AUTHKEY}
+    #     - TS_EXTRA_ARGS=--advertise-exit-node --advertise-routes=192.168.1.0/24
+    #     # Esto hace falta para que el splitDNS funcione
+    #     # - TS_USERSPACE=false
+    #     - TS_STATE_DIR=/var/lib/tailscale
+    #     # - TS_TAILSCALED_EXTRA_ARGS=--port=37036
+    #   volumes:
+    #     - ${DOCKER_PATH}/tailscale/state:/var/lib/tailscale
+    #   devices:
+    #     - /dev/net/tun:/dev/net/tun
+    #   cap_add:
+    #     - net_admin
+    #     - net_raw
+    #   restart: unless-stopped
+
+    # iperf3:
+    #   image: networkstatic/iperf3
+    #   container_name: iperf3
+    #   command: -s
+    #   devices:
+    #     - /dev/net/tun:/dev/net/tun
+    #   cap_add:
+    #     - net_admin
+    #     - net_raw
+    #   network_mode: host
+    #   restart: unless-stopped
 
 
 
-  # wg-easy:
-  #   image: ghcr.io/wg-easy/wg-easy:15
-  #   container_name: wg-easy
+    # wg-easy:
+    #   image: ghcr.io/wg-easy/wg-easy:15
+    #   container_name: wg-easy
 
-  #   restart: unless-stopped
+    #   restart: unless-stopped
 
-  #   cap_add:
-  #     - NET_ADMIN
-  #     - SYS_MODULE
+    #   cap_add:
+    #     - NET_ADMIN
+    #     - SYS_MODULE
 
-  #   volumes:
-  #     - /volume1/docker/wg-easy:/etc/wireguard
+    #   volumes:
+    #     - /volume1/docker/wg-easy:/etc/wireguard
 
-  #   ports:
-  #     - "51820:51820/udp"
-  #     - "51821:51821/tcp"
+    #   ports:
+    #     - "51820:51820/udp"
+    #     - "51821:51821/tcp"
 
-  #   environment:
-  #     - WG_HOST=ismolah0.duckdns.org
-  #     - WG_ALLOWED_IPS=0.0.0.0/0
+    #   environment:
+    #     - WG_HOST=ismolah0.duckdns.org
+    #     - WG_ALLOWED_IPS=0.0.0.0/0
 
-  #   sysctls:
-  #     - net.ipv4.ip_forward=1
-  #     - net.ipv4.conf.all.src_valid_mark=1
-      
-  #   networks:
-  #     - cloudflared_default
+    #   sysctls:
+    #     - net.ipv4.ip_forward=1
+    #     - net.ipv4.conf.all.src_valid_mark=1
 
-  # duckdns:
-  #   image: lscr.io/linuxserver/duckdns:latest
-  #   container_name: duckdns
-  #   environment:
-  #     - PUID=1000
-  #     - PGID=10
-  #     - TZ=Europe/Madrid
-  #     - SUBDOMAINS=ismolah0.duckdns.org
-  #     - TOKEN=04d3a279-ed4e-41d2-9180-6c6184b2f5de
-  #     - LOG_FILE=false
-  #     - UPDATE_IP=ipv4
-  #   volumes:
-  #     - ${DOCKER_PATH}/duckdns:/config
-  #   restart: unless-stopped
+    #   networks:
+    #     - cloudflared_default
+
+    # duckdns:
+    #   image: lscr.io/linuxserver/duckdns:latest
+    #   container_name: duckdns
+    #   environment:
+    #     - PUID=1000
+    #     - PGID=10
+    #     - TZ=Europe/Madrid
+    #     - SUBDOMAINS=ismolah0.duckdns.org
+    #     - TOKEN=04d3a279-ed4e-41d2-9180-6c6184b2f5de
+    #     - LOG_FILE=false
+    #     - UPDATE_IP=ipv4
+    #   volumes:
+    #     - ${DOCKER_PATH}/duckdns:/config
+    #   restart: unless-stopped
 
 
 
-# networks:
-#   proxy_network:
-#     external: true
-  # cloudflared_default:
-  #   external: true
+    # networks:
+    #   proxy_network:
+    #     external: true
+    # cloudflared_default:
+    #   external: true
 
