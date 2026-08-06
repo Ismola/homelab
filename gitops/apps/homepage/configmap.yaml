@@ -52,7 +52,9 @@ data:
             - Oracle Cloud:
                 icon: oracle.png
                 href: https://www.oracle.com/cloud
-
+            - Google Cloud Platform:
+                icon: google-cloud.png
+                href: https://console.cloud.google.com
 
         - DataBase:
             - pgAdmin:
