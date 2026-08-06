@@ -145,6 +145,10 @@ data:
                 icon: duplicati.png
                 href: https://duplicati.ismola.dev
                 description: Copias de seguridad
+            - MinIO:
+                icon: minio.png
+                href: https://minio.ismola.dev
+                description: Almacenamiento de objetos
 
 
         - Utils:
