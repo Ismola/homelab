@@ -8,9 +8,8 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in the h0 stack environment}
     volumes:
       - ${DOCKER_PATH:?set DOCKER_PATH in the h0 stack environment}/minio/data:/data
-    expose:
-      - "9000"
-      - "9001"
+    ports:
+      - "100.111.128.66:9010:9000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
       interval: 10s
