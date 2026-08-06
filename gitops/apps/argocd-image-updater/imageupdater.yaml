@@ -162,7 +162,7 @@ spec:
           writeBackTarget: kustomization
       images:
         - alias: headlamp
-          imageName: ghcr.io/headlamp-k8s/headlamp:latest
+          imageName: ghcr.io/headlamp-k8s/headlamp
           commonUpdateSettings:
             updateStrategy: semver
             forceUpdate: false
