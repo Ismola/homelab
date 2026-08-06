@@ -13,6 +13,6 @@ services:
       - ${DOCKER_PATH}/duplicati/config:/config
       - /mnt/@usb/sda1/Volumen1/backups:/backups
       - /volume1:/source
-    ports:
-      - 8200:8200
+    expose:
+      - 8200
     restart: unless-stopped
