@@ -1,0 +1,96 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k3s-etcd-snapshot
+spec:
+  schedule: "0 3 * * *"
+  timeZone: Europe/Madrid
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 1800
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: k3s-etcd-snapshot
+        spec:
+          automountServiceAccountToken: false
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+          restartPolicy: OnFailure
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/etcd
+                        operator: Exists
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+            - key: node-role.kubernetes.io/master
+              operator: Exists
+              effect: NoSchedule
+          containers:
+            - name: snapshot
+              image: alpine:3.22.1
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  k3s etcd-snapshot save \
+                    --name etcd-snapshot \
+                    --s3 \
+                    --s3-config-secret k3s-etcd-snapshot-s3-config
+                  k3s etcd-snapshot prune \
+                    --name etcd-snapshot \
+                    --snapshot-retention 5 \
+                    --s3 \
+                    --s3-config-secret k3s-etcd-snapshot-s3-config
+              securityContext:
+                runAsUser: 0
+                runAsNonRoot: false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: k3s-binary
+                  mountPath: /usr/local/bin/k3s
+                  readOnly: true
+                - name: k3s-config
+                  mountPath: /etc/rancher/k3s
+                  readOnly: true
+                - name: k3s-data
+                  mountPath: /var/lib/rancher/k3s
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: k3s-binary
+              hostPath:
+                path: /usr/local/bin/k3s
+                type: File
+            - name: k3s-config
+              hostPath:
+                path: /etc/rancher/k3s
+                type: Directory
+            - name: k3s-data
+              hostPath:
+                path: /var/lib/rancher/k3s
+                type: Directory
+            - name: tmp
+              emptyDir: {}

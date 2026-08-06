@@ -7,19 +7,17 @@ las demás interfaces del NAS.
 El almacenamiento persiste en `${DOCKER_PATH}/minio/data`. Este directorio es
 exclusivo de MinIO y no debe modificarse directamente.
 
-Antes de desplegar, el entorno del stack necesita estas variables:
+El entorno del stack necesita estas variables:
 
 ```dotenv
 MINIO_ROOT_USER=<usuario-administrador-aleatorio>
 MINIO_ROOT_PASSWORD=<clave-administrador-larga-y-aleatoria>
-MINIO_K3S_ACCESS_KEY=<access-key-aleatoria>
-MINIO_K3S_SECRET_KEY=<secret-key-larga-y-aleatoria>
-MINIO_K3S_BUCKET=k3s-etcd
 ```
 
-`minio-k3s-init` crea el bucket y reconcilia un usuario que sólo puede listar
-ese bucket y leer, escribir o eliminar sus objetos. Las credenciales no deben
-guardarse en Git.
+El bucket `k3s-etcd`, su política y el usuario limitado de K3s se crearon
+durante el bootstrap inicial. Sus credenciales están en el Secret
+`kube-system/k3s-etcd-snapshot-s3-config`; también deben conservarse fuera del
+clúster para poder restaurar un snapshot durante una recuperación total.
 
 Los servidores K3s usan directamente `http://h0:9010`, por lo que la creación
 de snapshots no depende de Cloudflare Access ni de un proxy HTTP. El tráfico

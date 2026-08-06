@@ -178,44 +178,20 @@ ssh -t root@NODO \
 
 ## Backups de etcd
 
-### `backup/etcd/k3s-etcd-backup.sh`
-
-Crea un snapshot de etcd con `k3s etcd-snapshot`, lo guarda en el montaje NFS
-del NAS, escribe el resultado en `/var/log/k3s-etcd-backup.log` y elimina
-snapshots con más de 14 días.
-
-Debe instalarse en un servidor K3s que forme parte del clúster etcd:
+Un único CronJob se programa sobre cualquier miembro etcd disponible y crea
+una copia local y otra remota. Si ese nodo no está disponible, Kubernetes
+elige otro; los nuevos miembros etcd son candidatos automáticamente. Las
+copias remotas se envían mediante S3 a MinIO en `h0` y se pueden consultar:
 
 ```bash
-ssh root@v3.elver-chicken.ts.net \
-  'curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/backup/etcd/k3s-etcd-backup.sh -o /usr/local/bin/k3s-etcd-backup.sh && chmod 0755 /usr/local/bin/k3s-etcd-backup.sh'
+kubectl get etcdsnapshotfiles
 ```
 
-Prueba manual:
-
-```bash
-ssh root@v3.elver-chicken.ts.net /usr/local/bin/k3s-etcd-backup.sh
-```
-
-El script espera que `/mnt/nas/etcd-backups` esté montado y escribe en una ruta
-concreta de OpenCloud. Esa ruta debe revisarse antes de instalarlo.
-
-### `backup/etcd/config.bash`
-
-No es un script ejecutable sino una guía de configuración. Documenta:
-
-- La entrada NFS que debe añadirse a `/etc/fstab`.
-- La instalación del script de backup.
-- La prueba del montaje y del snapshot.
-- La entrada de cron diaria a las `03:00`.
-
-Puede consultarse desde cualquier equipo:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Ismola/homelab/refs/heads/main/scripts/backup/etcd/config.bash
-```
-
-Los pasos deben aplicarse manualmente por SSH en el servidor K3s elegido.
+El programador por nodo de K3s está desactivado en el inventario Ansible. El
+CronJob está en [`gitops/apps/etcd-backup/`](../gitops/apps/etcd-backup/) y lee
+las credenciales del Secret `kube-system/k3s-etcd-snapshot-s3-config`. El
+destino está documentado en
+[`docker/minio/README.md`](../docker/minio/README.md).
 
 ## Oracle Cloud
 

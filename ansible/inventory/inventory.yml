@@ -131,6 +131,7 @@ k3s_cluster:
       --tls-san=v3.elver-chicken.ts.net
       --tls-san=v7.elver-chicken.ts.net
       --tls-san=rpi.elver-chicken.ts.net
+      --etcd-disable-snapshots
       --node-label=isma.dev/provider={{ provider }}
       --node-label=isma.dev/ram-gb={{ ram_gb }}
       --node-label=isma.dev/cpu={{ cpu }}
