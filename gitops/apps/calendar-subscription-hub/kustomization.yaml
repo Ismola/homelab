@@ -12,7 +12,7 @@ images:
   - name: ghcr.io/ismola/calendar-subscription-hub-web
     newTag: main
     newName: ghcr.io/ismola/calendar-subscription-hub-web
-    digest: sha256:f17776a9bb0459dc6f451bc463dae298e71c263ddc30188443056238df0160d7
+    digest: sha256:9e23e6a60c21c4a0eca7d0922efcfa6aa1ecc6e964cdcacddc0455ef67f396c8
   - name: ghcr.io/ismola/calendar-subscription-hub-worker
     newTag: main
     newName: ghcr.io/ismola/calendar-subscription-hub-worker
