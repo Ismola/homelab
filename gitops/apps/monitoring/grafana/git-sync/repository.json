@@ -1,0 +1,23 @@
+{
+  "apiVersion": "provisioning.grafana.app/v0alpha1",
+  "kind": "Repository",
+  "metadata": {
+    "name": "homelab"
+  },
+  "spec": {
+    "title": "Homelab dashboards",
+    "description": "Dashboards gestionados desde el repositorio homelab",
+    "type": "git",
+    "git": {
+      "url": "https://github.com/Ismola/homelab.git",
+      "branch": "main",
+      "path": "gitops/apps/monitoring/grafana/dashboards"
+    },
+    "sync": {
+      "enabled": true,
+      "target": "folderless",
+      "intervalSeconds": 60
+    },
+    "workflows": []
+  }
+}

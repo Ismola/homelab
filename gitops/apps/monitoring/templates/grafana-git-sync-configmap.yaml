@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-git-sync
+  labels:
+    app.kubernetes.io/name: grafana-git-sync
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  repository.json: |
+{{ .Files.Get "grafana/git-sync/repository.json" | nindent 4 }}
+  reconcile.sh: |
+{{ .Files.Get "grafana/git-sync/reconcile.sh" | nindent 4 }}

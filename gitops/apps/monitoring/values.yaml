@@ -2,6 +2,10 @@ kube-prometheus-stack:
   crds:
     enabled: true
 
+  # Los dashboards se gestionan con el Git Sync nativo de Grafana. Desactivar
+  # los dashboards del chart evita que dos provisioners reclamen los mismos UID.
+  defaultDashboardsEnabled: false
+
   # Algunos componentes internos de K3s no exponen sus métricas
   # como lo haría un clúster Kubernetes tradicional.
   kubeEtcd:
@@ -83,6 +87,100 @@ kube-prometheus-stack:
           name: grafana-smtp
           key: password
 
+    # Git Sync sólo soporta dashboards y carpetas. El resto de la configuración
+    # de alerting se provisiona desde este mismo chart/repo.
+    alerting:
+      contact-points.yaml:
+        apiVersion: 1
+        contactPoints:
+          - orgId: 1
+            name: Correo administrador K3s
+            receivers:
+              - uid: dftk50sv51xc0e
+                type: email
+                settings:
+                  addresses: ismolahiena@gmail.com
+                  singleEmail: false
+                disableResolveMessage: true
+      policies.yaml:
+        apiVersion: 1
+        policies:
+          - orgId: 1
+            receiver: Correo administrador K3s
+            group_by:
+              - grafana_folder
+              - alertname
+            group_wait: 2m
+            group_interval: 15m
+            repeat_interval: 12h
+
+    # Mantener temporalmente un provider vacío con el nombre anterior hace que
+    # Grafana retire de forma limpia los dashboards provisionados por ConfigMap.
+    # Los dashboards de Git Sync usan otro manager y no se ven afectados.
+    dashboardProviders:
+      migration.yaml:
+        apiVersion: 1
+        providers:
+          - name: sidecarProvider
+            orgId: 1
+            folder: ""
+            type: file
+            disableDeletion: false
+            editable: false
+            options:
+              path: /var/lib/grafana/dashboards/migration-empty
+
+    extraEmptyDirMounts:
+      - name: migration-empty-dashboards
+        mountPath: /var/lib/grafana/dashboards/migration-empty
+
+    extraContainerVolumes:
+      - name: grafana-git-sync-config
+        configMap:
+          name: '{{ .Release.Name }}-grafana-git-sync'
+
+    # Grafana guarda la conexión Git Sync en su base de datos. Este reconciler
+    # la crea/restaura desde repository.json y realiza la migración inicial de
+    # los recursos que antes habían sido creados desde la UI/ConfigMaps.
+    extraContainers: |
+      - name: git-sync-provisioner
+        image: docker.io/curlimages/curl:8.21.0
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - /etc/grafana/git-sync/reconcile.sh
+        env:
+          - name: GF_SECURITY_ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+                name: grafana-admin
+                key: admin-user
+          - name: GF_SECURITY_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: grafana-admin
+                key: admin-password
+        resources:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 48Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+          - name: grafana-git-sync-config
+            mountPath: /etc/grafana/git-sync
+            readOnly: true
+
     sidecar:
       resources:
         requests:
@@ -91,21 +189,8 @@ kube-prometheus-stack:
         limits:
           cpu: 100m
           memory: 128Mi
-
-    dashboards:
-      default:
-        longhorn:
-          gnetId: 17626
-          revision: 1
-          datasource: Prometheus
-        postgresql:
-          gnetId: 9628
-          revision: 8
-          datasource: Prometheus
-        mongodb:
-          gnetId: 12079
-          revision: 1
-          datasource: Prometheus
+      dashboards:
+        enabled: false
 
   prometheus:
     enabled: true

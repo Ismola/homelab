@@ -1,0 +1,10 @@
+{
+  "apiVersion": "folder.grafana.app/v1",
+  "kind": "Folder",
+  "metadata": {
+    "name": "ffud3x02s2fpce"
+  },
+  "spec": {
+    "title": "Kubernetes"
+  }
+}
