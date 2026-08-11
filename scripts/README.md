@@ -19,7 +19,7 @@ especialmente los scripts de mantenimiento.
 
 Lee los hosts, roles y proveedores de `ansible/inventory/inventory.yml`, los
 stacks incluidos en `docker/compose.yml` y las aplicaciones seleccionadas por
-`gitops/applicationset/argocd.yaml`. Con esos datos regenera el diagrama de
+`gitops/apps/argocd/files/applicationset.yaml`. Con esos datos regenera el diagrama de
 infraestructura delimitado por marcadores en el README principal. GitHub
 Actions lo ejecuta automáticamente en cada push.
 

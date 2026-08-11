@@ -1,0 +1,10 @@
+apiVersion: v2
+name: argocd-stack
+description: Argo CD y bootstrap declarativo del homelab
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: argo-cd
+    version: 9.5.17
+    repository: https://argoproj.github.io/argo-helm

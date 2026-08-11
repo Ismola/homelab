@@ -13,7 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = ROOT / "ansible/inventory/inventory.yml"
 DOCKER_COMPOSE = ROOT / "docker/compose.yml"
-APPLICATION_SET = ROOT / "gitops/applicationset/argocd.yaml"
+APPLICATION_SET = ROOT / "gitops/apps/argocd/files/applicationset.yaml"
 README = ROOT / "README.md"
 START = "<!-- inventory-diagram:start -->"
 END = "<!-- inventory-diagram:end -->"

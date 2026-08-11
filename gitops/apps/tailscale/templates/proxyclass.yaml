@@ -1,3 +1,4 @@
+{{- if .Capabilities.APIVersions.Has "tailscale.com/v1alpha1/ProxyClass" }}
 apiVersion: tailscale.com/v1alpha1
 kind: ProxyClass
 metadata:
@@ -19,3 +20,4 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+{{- end }}

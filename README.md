@@ -73,7 +73,6 @@ flowchart TB
         gitops_cakeshop_concept["cakeshop-concept"]
         gitops_calendar_subscription_hub["calendar-subscription-hub"]
         gitops_cloudflare["cloudflare"]
-        gitops_cluster_priorities["cluster-priorities"]
         gitops_etcd_backup["etcd-backup"]
         gitops_gateway_api_crds["gateway-api-crds"]
         gitops_gateway_system["gateway-system"]
@@ -133,7 +132,7 @@ Inventario: [`ansible/inventory/inventory.yml`](ansible/inventory/inventory.yml)
 El diagrama de la vista general se genera desde este inventario, los stacks
 incluidos en [`docker/compose.yml`](docker/compose.yml) y las aplicaciones
 seleccionadas por el
-[`ApplicationSet`](gitops/applicationset/argocd.yaml). El workflow
+[`ApplicationSet`](gitops/apps/argocd/files/applicationset.yaml). El workflow
 [`update-inventory-diagram.yml`](.github/workflows/update-inventory-diagram.yml)
 lo actualiza y crea un commit automáticamente en cada push si cambian los
 nodos o los servicios desplegados. También puede regenerarse localmente con:

@@ -1,0 +1,8 @@
+tailscale-operator:
+  installCRDs: true
+
+  operatorConfig:
+    priorityClassName: homelab-critical
+    nodeSelector:
+      kubernetes.io/os: linux
+      capability.isma.dev/stable: "true"

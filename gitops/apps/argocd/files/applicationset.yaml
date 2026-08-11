@@ -1,6 +1,3 @@
-# Esto esta aplicado en Headlmap
-
-
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -55,6 +52,12 @@ spec:
           - ServerSideApply=true
           - DisableClientSideApplyMigration=true
           - SkipDryRunOnMissingResource=true
+    {{- end }}
+    {{- if eq .path.basenameNormalized "tailscale" }}
+    spec:
+      source:
+        helm:
+          releaseName: tailscale-operator
     {{- end }}
     {{- if or (eq .path.basenameNormalized "mongodb") (eq .path.basenameNormalized "postgres") }}
     spec:
