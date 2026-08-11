@@ -1,9 +1,10 @@
 # Backups de Longhorn
 
-El destino por defecto es el bucket privado `longhorn` de MinIO en `h0`:
+El destino por defecto reutiliza el bucket privado de etcd en MinIO, pero
+mantiene los objetos de Longhorn bajo un prefijo independiente:
 
 ```text
-s3://longhorn@us-east-1/
+s3://k3s-etcd@us-east-1/homelab/longhorn/
 ```
 
 Longhorn se conecta directamente a `http://100.111.128.66:9010` por
@@ -15,26 +16,37 @@ los volúmenes que no tengan otra programación. Se ejecuta diariamente a las
 02:00 según la zona horaria del controlador de Longhorn, conserva 14 copias
 por volumen y fuerza una copia completa cada 7 copias incrementales.
 
-## Credenciales
+## Credenciales compartidas con etcd
 
-El usuario y el bucket se crean de forma idempotente mediante
-`docker/minio/compose.yml`. Antes de desplegar el cambio, configura en el
-entorno del stack de Portainer dos valores largos y aleatorios:
-
-```dotenv
-MINIO_LONGHORN_ACCESS_KEY=<access-key-aleatoria>
-MINIO_LONGHORN_SECRET_KEY=<secret-key-larga-y-aleatoria>
-```
-
-Usa los mismos valores para crear el Secret fuera del repositorio:
+Longhorn usa el mismo access key y secret key que
+`kube-system/k3s-etcd-snapshot-s3-config`. Como Kubernetes no permite
+referenciar un Secret de otro namespace y Longhorn requiere nombres de claves
+AWS, se copian las dos credenciales sin decodificarlas ni mostrarlas:
 
 ```bash
-kubectl --namespace longhorn create secret generic longhorn-minio-credentials \
-  --from-literal=AWS_ACCESS_KEY_ID='<MINIO_LONGHORN_ACCESS_KEY>' \
-  --from-literal=AWS_SECRET_ACCESS_KEY='<MINIO_LONGHORN_SECRET_KEY>' \
-  --from-literal=AWS_ENDPOINTS='http://100.111.128.66:9010' \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl --namespace kube-system get secret k3s-etcd-snapshot-s3-config \
+  -o json | jq '
+    {
+      apiVersion: "v1",
+      kind: "Secret",
+      metadata: {
+        name: "longhorn-minio-credentials",
+        namespace: "longhorn"
+      },
+      type: "Opaque",
+      data: {
+        AWS_ACCESS_KEY_ID: .data["etcd-s3-access-key"],
+        AWS_SECRET_ACCESS_KEY: .data["etcd-s3-secret-key"],
+        AWS_ENDPOINTS: ("http://100.111.128.66:9010" | @base64)
+      }
+    }
+  ' | kubectl apply -f -
 ```
+
+Esta duplicación es necesaria cada vez que se roten las credenciales de etcd.
+Compartir el usuario reduce el aislamiento entre ambos tipos de backup, pero
+evita mantener un segundo juego de credenciales, tal como se ha decidido para
+este entorno.
 
 No se usa `VIRTUAL_HOSTED_STYLE`: este MinIO no configura `MINIO_DOMAIN` y se
 accede por IP, por lo que Longhorn debe utilizar peticiones path-style.

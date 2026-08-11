@@ -62,7 +62,7 @@ flowchart TB
         compose_duplicati["duplicati<br/>duplicati"]
         compose_gickup["gickup<br/>gickup"]
         compose_pgbackup["pgbackup<br/>pgbackups"]
-        compose_minio["minio<br/>minio · minio-bootstrap"]
+        compose_minio["minio<br/>minio"]
     end
 
     subgraph k3s_deployments["Aplicaciones GitOps · K3s"]

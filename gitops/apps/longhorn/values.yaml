@@ -36,7 +36,7 @@ longhorn:
   # MinIO está fuera del clúster y se alcanza directamente por Tailscale.
   # El endpoint S3 y las credenciales se guardan en el Secret, no en Git.
   defaultBackupStore:
-    backupTarget: "s3://longhorn@us-east-1/"
+    backupTarget: "s3://k3s-etcd@us-east-1/homelab/longhorn/"
     backupTargetCredentialSecret: longhorn-minio-credentials
     pollInterval: 300
 
