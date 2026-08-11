@@ -6,7 +6,21 @@
 
 version: 2
 updates:
- - package-ecosystem: "devcontainers"
-   directory: "/"
-   schedule:
-     interval: weekly
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  # El chart y las imágenes del operador comparten versión. Dependabot actualiza
+  # Chart.yaml y Chart.lock en una única PR, que se valida y fusiona mediante el
+  # workflow dependabot-tailscale-automerge.yml.
+  - package-ecosystem: "helm"
+    directory: "/gitops/apps/tailscale"
+    schedule:
+      interval: daily
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 1
+    groups:
+      tailscale:
+        patterns:
+          - "tailscale-operator"
