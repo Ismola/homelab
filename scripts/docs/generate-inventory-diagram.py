@@ -150,6 +150,8 @@ def render() -> str:
             "    workloads --> k3s_deployments",
             "    workloads --> databases",
             "    databases --> longhorn",
+            '    gitops_longhorn -->|"Backups S3"| compose_minio',
+            '    gitops_etcd_backup -->|"Snapshots S3"| compose_minio',
             '    workloads -->|"API S3"| r2',
             "```",
         ]

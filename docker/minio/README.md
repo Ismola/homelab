@@ -1,4 +1,4 @@
-# MinIO para snapshots de K3s
+# MinIO para backups de K3s y Longhorn
 
 El Compose principal despliega MinIO en `h0`. La API S3 se publica únicamente
 en la dirección Tailscale de `h0`, como `http://h0:9010`; no queda enlazada a
@@ -12,7 +12,22 @@ El entorno del stack necesita estas variables:
 ```dotenv
 MINIO_ROOT_USER=<usuario-administrador-aleatorio>
 MINIO_ROOT_PASSWORD=<clave-administrador-larga-y-aleatoria>
+MINIO_LONGHORN_ACCESS_KEY=<access-key-aleatoria>
+MINIO_LONGHORN_SECRET_KEY=<secret-key-larga-y-aleatoria>
 ```
+
+El servicio de un solo uso `minio-bootstrap` crea o actualiza el bucket
+privado `longhorn`, un usuario dedicado y la política mínima necesaria para
+listar, leer, escribir y eliminar sus backups. El contenedor debe finalizar
+con código `0`; puede comprobarse después de desplegar el stack con:
+
+```bash
+docker compose -f docker/compose.yml logs minio-bootstrap
+```
+
+La misma access key y secret key deben guardarse en el Secret de Kubernetes
+`longhorn/longhorn-minio-credentials`, siguiendo
+[`gitops/apps/longhorn/README.md`](../../gitops/apps/longhorn/README.md).
 
 El bucket `k3s-etcd`, su política y el usuario limitado de K3s se crearon
 durante el bootstrap inicial. Sus credenciales están en el Secret

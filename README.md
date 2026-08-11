@@ -62,7 +62,7 @@ flowchart TB
         compose_duplicati["duplicati<br/>duplicati"]
         compose_gickup["gickup<br/>gickup"]
         compose_pgbackup["pgbackup<br/>pgbackups"]
-        compose_minio["minio<br/>minio"]
+        compose_minio["minio<br/>minio · minio-bootstrap"]
     end
 
     subgraph k3s_deployments["Aplicaciones GitOps · K3s"]
@@ -121,6 +121,8 @@ flowchart TB
     workloads --> k3s_deployments
     workloads --> databases
     databases --> longhorn
+    gitops_longhorn -->|"Backups S3"| compose_minio
+    gitops_etcd_backup -->|"Snapshots S3"| compose_minio
     workloads -->|"API S3"| r2
 ```
 <!-- inventory-diagram:end -->
@@ -170,8 +172,8 @@ La infraestructura combina tres tipos de almacenamiento con responsabilidades di
 
 Longhorn se ejecuta en K3s y se despliega mediante Argo CD desde
 [`gitops/apps/longhorn/`](gitops/apps/longhorn/). Usa cualquier nodo con
-capacidad `storage`, mantiene dos réplicas por volumen y envía backups por CIFS
-a `h0`. La
+capacidad `storage`, mantiene dos réplicas por volumen y envía backups diarios
+por S3 al bucket privado de MinIO en `h0`. La
 `StorageClass` `longhorn` se selecciona explícitamente en las cargas que
 necesitan almacenamiento persistente.
 

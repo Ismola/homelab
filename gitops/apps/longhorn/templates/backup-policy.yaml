@@ -1,0 +1,26 @@
+apiVersion: longhorn.io/v1beta2
+kind: BackupTarget
+metadata:
+  name: legacy-cifs
+  namespace: {{ .Release.Namespace }}
+spec:
+  backupTargetURL: "cifs://100.111.128.66/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4%20Archives/Backup/Longhorn?cifsOptions=vers=3.0,soft"
+  credentialSecret: longhorn-smb-credentials
+  pollInterval: "300s"
+---
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: databases-daily
+  namespace: {{ .Release.Namespace }}
+spec:
+  cron: "0 2 * * *"
+  task: backup
+  groups:
+    - default
+  retain: 14
+  concurrency: 1
+  labels:
+    purpose: databases
+  parameters:
+    full-backup-interval: "7"
