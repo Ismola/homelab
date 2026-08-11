@@ -54,8 +54,10 @@ services:
     user: "0:0"
     container_name: resolve_pgbackup
     image: prodrigestivill/postgres-backup-local:13
-    
     restart: unless-stopped
+    # El NAS ya pertenece a la tailnet. Compartir su red permite resolver MagicDNS
+    # y alcanzar los servicios publicados por Tailscale desde este contenedor.
+    network_mode: host
     # network_mode: "service:ts-postgres" # <--- También en la misma red
     volumes:
       - "/volume1/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4 Archives/Backup/DaVinci/Automatic:/backups"
@@ -63,7 +65,7 @@ services:
     #   - postgres
     environment:
       <<: [*db-environment, *backup-environment]
-      POSTGRES_HOST: ${POSTGRES_HOST}  # Al estar en la misma red, es localhost
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres-db.elver-chicken.ts.net}
       POSTGRES_EXTRA_OPTS: --blobs --format=custom --quote-all-identifiers
       BACKUP_SUFFIX: .backup
       BACKUP_ON_START: true
