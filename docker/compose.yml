@@ -2,7 +2,6 @@ include:
   - path: ./cloudflare/compose.yml
   - path: ./media/compose.yml
   - path: ./networking/compose.yml
-  - path: ./watchtower/compose.yml
   - path: ./immich/compose.yml
   - path: ./opencloud/compose.yml
   - path: ./duplicati/compose.yml

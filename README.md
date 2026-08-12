@@ -56,7 +56,6 @@ flowchart TB
         compose_cloudflare["cloudflare<br/>cloudflared"]
         compose_media["media<br/>qbittorrent · jackett · radarr · sonarr · bazarr · prowlarr · plex · seerr · qbit_manage"]
         compose_networking["networking<br/>pihole · npm"]
-        compose_watchtower["watchtower<br/>watchtower"]
         compose_immich["immich<br/>immich-server · immich-machine-learning · redis · database"]
         compose_opencloud["opencloud<br/>opencloud"]
         compose_duplicati["duplicati<br/>duplicati"]
