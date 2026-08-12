@@ -80,6 +80,7 @@ def render() -> str:
     docker_hosts, k3s_hosts = load_hosts()
     docker_stacks = load_docker_stacks()
     gitops_apps = load_gitops_apps()
+    docker_host_label = " · ".join(docker_hosts) or "Docker hosts"
     providers = sorted(
         {host.get("provider", "unknown") for host in k3s_hosts},
         key=lambda provider: (provider != "homelab", provider),
@@ -113,7 +114,7 @@ def render() -> str:
         lines.append("    end")
         lines.append("")
 
-    lines.append('    subgraph docker_deployments["Docker Compose · h0"]')
+    lines.append(f'    subgraph docker_deployments["Docker Compose · {docker_host_label}"]')
     for stack in docker_stacks:
         services = " · ".join(stack["services"])
         lines.append(

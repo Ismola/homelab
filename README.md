@@ -4,24 +4,17 @@
 
 **Infraestructura híbrida, privada por diseño y gestionada como código**
 
-Docker en el NAS · K3s multicloud · GitOps · Ansible · Tailscale
-
-![Docker](https://img.shields.io/badge/h0-Docker-2496ED?logo=docker&logoColor=white)
+![Docker](https://img.shields.io/badge/nas-Docker-2496ED?logo=docker&logoColor=white)
 ![K3s](https://img.shields.io/badge/cluster-K3s-FFC61C?logo=k3s&logoColor=black)
 ![Tailscale](https://img.shields.io/badge/red-Tailscale-242424?logo=tailscale&logoColor=white)
-![Cloudflare R2](https://img.shields.io/badge/objetos-Cloudflare_R2-F38020?logo=cloudflare&logoColor=white)
-![Argo CD](https://img.shields.io/badge/entrega-Argo_CD-EF7B4D?logo=argo&logoColor=white)
-![Ansible](https://img.shields.io/badge/automatización-Ansible-EE0000?logo=ansible&logoColor=white)
 
 </div>
 
----
+Esta es la solución que uso: combinar hardware propio la capa gratuita de distintos proveedores cloud, conectándolo todo mediante [Tailscale](https://tailscale.com/).
 
-## Vista general
+Inventario de servidores: [`ansible/inventory/inventory.yml`](ansible/inventory/inventory.yml)
 
-Homelab híbrido con servicios públicos y privados, almacenamiento y cómputo local y en la nube, y clúster K3s multicloud. La infraestructura se gestiona como código mediante Ansible y GitOps.
-
-La idea, es aprovechar la capa gratuita de los distintos proveedores de nube y usar infraestructura local, para obtener un entorno de desarrollo y pruebas con alta disponibilidad y tolerancia a fallos, sin depender de un único proveedor ni de una única red física y lo más económico posible.
+Hay varias servidores conectados por tailscale formando un cluster [k3s](https://k3s.io/) y un NAS corriendo varios servicios docker. la mayoría de los servicios corren en el cluster k3s, pero algunos servicios que requieren acceso a almacenamiento local corren en el NAS.
 
 <!-- inventory-diagram:start -->
 ```mermaid
@@ -126,88 +119,37 @@ flowchart TB
 ```
 <!-- inventory-diagram:end -->
 
-## Infraestructura
-
-Inventario: [`ansible/inventory/inventory.yml`](ansible/inventory/inventory.yml)
-
-El diagrama de la vista general se genera desde este inventario, los stacks
-incluidos en [`docker/compose.yml`](docker/compose.yml) y las aplicaciones
-seleccionadas por el
-[`ApplicationSet`](gitops/apps/argocd/files/applicationset.yaml). El workflow
-[`update-inventory-diagram.yml`](.github/workflows/update-inventory-diagram.yml)
-lo actualiza y crea un commit automáticamente en cada push si cambian los
-nodos o los servicios desplegados. También puede regenerarse localmente con:
-
-```bash
-python3 scripts/docs/generate-inventory-diagram.py
-```
-
-### Capacidades de los nodos
-
-La planificación no depende del nombre del host ni de una cifra concreta de
-RAM. Cada nodo declara en el inventario una o varias capacidades que K3s
-publica como labels `capability.isma.dev/<capacidad>=true`:
-
-| Capacidad | Uso |
-| :--- | :--- |
-| `lightweight` | Node exporter, Cloudflared y frontends pequeños |
-| `general` | Aplicaciones con necesidades medias de CPU o memoria |
-| `stable` | Controladores y servicios críticos |
-| `storage` | Longhorn, sus réplicas y workloads con PVC Longhorn |
-
-Un nodo nuevo sólo necesita la lista `capabilities` adecuada. Los argumentos de K3s aplican las etiquetas al unirse y [`sync-node-capabilities.bash`](scripts/k3s/sync-node-capabilities.bash) reconcilia cambios posteriores.
-
 ### Almacenamiento
 
-La infraestructura combina tres tipos de almacenamiento con responsabilidades distintas:
+La infraestructura combina tres tipos de almacenamiento.
 
 | Capa | Uso |
 | :--- | :--- |
-| Longhorn en K3s | Volúmenes persistentes replicados para PostgreSQL, MongoDB y otras cargas con estado |
-| `h0` | [Documentos](docker/opencloud/compose.yml), [imágenes](docker/immich/compose.yml), contenido local y copias alojadas en el NAS |
-| Cloudflare R2 | Almacenamiento de objetos para las aplicaciones que necesitan una API compatible con S3 |
-
-### Longhorn
-
-Longhorn se ejecuta en K3s y se despliega mediante Argo CD desde
-[`gitops/apps/longhorn/`](gitops/apps/longhorn/). Usa cualquier nodo con
-capacidad `storage`, mantiene dos réplicas por volumen y envía backups diarios
-por S3 al bucket privado de MinIO en `h0`. La
-`StorageClass` `longhorn` se selecciona explícitamente en las cargas que
-necesitan almacenamiento persistente.
-
-### Bases de datos
-
-PostgreSQL y MongoDB ya se ejecutan en K3s como StatefulSets gestionados por
-Argo CD, con volúmenes Longhorn y credenciales almacenadas en Secrets. Consulta
-su configuración en [`gitops/apps/postgres/`](gitops/apps/postgres/README.md) y
-[`gitops/apps/mongodb/`](gitops/apps/mongodb/README.md).
-
-Las aplicaciones de K3s acceden a R2 mediante endpoint, región y bucket S3. Las credenciales y los valores sensibles se obtienen desde Secrets de Kubernetes y no se guardan directamente en el repositorio.
-
-La configuración concreta pertenece al manifiesto de cada aplicación. El uso actual puede consultarse [aquí](gitops/apps/argocd-image-updater/imageupdater.yaml).
+| Longhorn + Bases de Datos | Volúmenes persistentes replicados en [Longhorn](gitops/apps/longhorn/README.md) (K3s) para [PostgreSQL](gitops/apps/postgres/README.md), [MongoDB](gitops/apps/mongodb/README.md) |
+| `nas` | [Documentos](docker/opencloud/compose.yml), [imágenes](docker/immich/compose.yml), y [copias de seguridad de Longhorn](gitops/apps/longhorn/README.md)  y [etcd](gitops/apps/etcd-backup/cronjob.yaml) guardadas en [Minio](docker/minio/README.md) |
+| Cloudflare R2 | Almacenamiento de objetos |
 
 ## Red y resolución DNS
 
-Todos los equipos —incluidos `h0` y los nodos K3s definidos en el inventario— están conectados por Tailscale. Así, la comunicación interna no depende de que los nodos compartan proveedor o red física.
+Todos los equipos —incluidos `nas` y los nodos K3s definidos en el inventario— están conectados por [Tailscale](https://tailscale.com/). Así, la comunicación interna no depende de que los nodos compartan proveedor o red física.
 
-### Acceso privado
+Combinando [Cloudflare Tunnels](https://developers.cloudflare.com/tunnel/) + [Cloudflare Control Access](https://www.cloudflare.com/sase/products/access/) + [Tailscale](https://tailscale.com/), tengo acceso a servicios de forma pública, pública pero con control de acceso oauth y totalmente privada desde tailscale
 
-Los clientes conectados a la tailnet pueden acceder a ciertos servicios de uso personal.
+### Acceso privado por [Tailscale](https://tailscale.com/)
 
 | Plataforma | Método de acceso |
 | :--- | :--- |
-| Docker en `h0` | Conexión directa al nombre MagicDNS de `h0` y al puerto publicado por el servicio: `h0:<puerto>` |
-| Aplicaciones web de K3s | Entrada privada publicada en la tailnet por el [Tailscale Operator](gitops/apps/tailscale/script.bash) |
+| Aplicaciones web de K3s | Entrada privada publicada en la tailnet por el [Tailscale Operator](gitops/apps/tailscale/README.md) |
+| Aplicaciones corriendo en el NAS | Conexión directa mediante [Split DNS](#split-dns) |
 
 ```mermaid
 flowchart LR
     client["Cliente en la tailnet"]
 
-    client -->|"MagicDNS + puerto"| h0["h0"]
-    h0 --> docker["Servicio Docker"]
+    client -->|"Split DNS"| nas["nas"]
+    nas --> docker["Servicio Docker"]
 
-    client -->|"Entrada privada"| operator["Tailscale Operator"]
+    client -->operator["Tailscale Operator"]
     operator --> ingress["Ingress / Service K3s"]
     ingress --> app["Aplicación web"]
 ```
@@ -216,7 +158,7 @@ flowchart LR
 
 Esto hace que un dominio resuelva a una IP pública desde Internet y a una IP privada desde la tailnet. Da acceso publico a los servicios, pero permite que los clientes conectados a la tailnet accedan a ellos de forma privada y más rápida. Útil en servicios que manejan grandes cantidades de datos, como servicios de [streaming](docker/media/compose.yml) o [almacenamiento](docker/opencloud/compose.yml).
 
-Los servicios configurados usan una ruta rápida dentro de Tailscale, mientras conservan su acceso público. [Pi-hole y Nginx Proxy Manager](docker/networking/compose.yml) resuelven y enrutan el tráfico local desde `h0`.
+Los servicios configurados usan una ruta rápida dentro de Tailscale, mientras conservan su acceso público. [Pi-hole y Nginx Proxy Manager](docker/networking/compose.yml) resuelven y enrutan el tráfico local desde `nas`.
 
 ```mermaid
 flowchart LR
@@ -224,18 +166,17 @@ flowchart LR
     internetClient["Cliente desde Internet"]
 
     tailscaleDNS["DNS interno de Tailscale"]
-    pihole["Pi-hole · h0"]
+    pihole["Pi-hole · nas"]
     npm["Nginx Proxy Manager"]
     cloudflare["Cloudflare"]
     service["Servicio Docker"]
 
     tailscaleClient -->|"consulta servicio.ismola.dev"| tailscaleDNS
     tailscaleDNS --> pihole
-    pihole -->|"IP privada / Tailscale de h0"| npm
+    pihole -->|"IP privada / Tailscale de nas"| npm
     npm --> service
 
     internetClient -->|"consulta servicio.ismola.dev"| cloudflare
-    cloudflare -->|"Cloudflare Tunnel / proxy público"| service
     cloudflare -->|"Cloudflare Tunnel / proxy público"| service
 ```
 
@@ -243,7 +184,7 @@ Solo afecta a los nombres configurados; el resto usa el DNS público.
 
 ### Acceso público
 
-Se corre un túnel de Cloudflare en [`h0`](docker/cloudflare/compose.yml) para exponer los servicios públicos y otro en el cluster [`K3s`](gitops/apps/cloudflare/deployment.yaml) para exponer las aplicaciones web. La configuración de los túneles se encuentra en los respectivos archivos de composición.
+Se corre un túnel de Cloudflare en [`nas`](docker/cloudflare/compose.yml) para exponer los servicios públicos y otro en el cluster [`K3s`](gitops/apps/cloudflare/deployment.yaml) para exponer las aplicaciones web. La configuración de los túneles se encuentra en los respectivos archivos de composición.
 
 ```mermaid
 flowchart LR
@@ -257,16 +198,23 @@ flowchart LR
     tunnel --> service
 ```
 
-## Organización del repositorio
+### Acceso público con control de acceso OAuth
 
-La separación principal es:
+Basicamente es activar Cloudflare Access en el túnel de Cloudflare. Esto hace que los servicios sean públicos, pero requieran autenticación OAuth para acceder a ellos. La configuración de los túneles se encuentra en los respectivos archivos de composición.
 
-| Ruta | Destino | Responsabilidad |
-| :--- | :--- | :--- |
-| [`docker/`](docker/) | `h0` | Servicios locales ejecutados con Docker Compose |
-| [`gitops/apps/`](gitops/apps/) | Clúster K3s | Aplicaciones, bases de datos y Longhorn reconciliados por Argo CD |
-| [`ansible/`](ansible/) | Toda la infraestructura | Inventario, variables y mantenimiento de hosts |
-| [`scripts/`](scripts/README.md) | Operación | Tareas auxiliares, backups y aprovisionamiento |
+```mermaid
+flowchart LR
+    client["Cliente desde Internet"]
+    cloudflare["Cloudflare"]
+    access["Cloudflare Access"]
+    tunnel["Túnel Cloudflare"]
+    service["Servicio Docker / Aplicación K3s"]
+
+    client --> cloudflare
+    cloudflare --> access
+    access --> tunnel
+    tunnel --> service
+```
 
 ## Agradecimientos
 
