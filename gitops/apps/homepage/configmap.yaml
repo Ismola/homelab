@@ -158,7 +158,7 @@ data:
                 description: Acceso a la reunión
             - Zoom Siryus Soporte:
                 icon: zoom.png
-                href: https://zoom.us/j/99721504946
+                href: https://zoom.us/j/99721504946?pwd=UWJGU1hnS2lWb3lvQ3l2azQ1NER3QT09
                 description: Acceso a la reunión
             - Mail Siryus:
                 icon: mdi-email-outline
