@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/jw-hitster
     newTag: main
     newName: ghcr.io/ismola/jw-hitster
-    digest: sha256:9c9eebababf694fea103821154eafec4baa32e58a110689467b04fe154ae5fee
+    digest: sha256:c713167df16fb562c54ed974f226725489abd4b4853e8d6de89002e65c856ed6
