@@ -11,4 +11,4 @@ images:
   - name: ghcr.io/ismola/js-snake
     newTag: main
     newName: ghcr.io/ismola/js-snake
-    digest: sha256:d2219a5c38805011c9bb27640365ccc7226bb5d4a0d40cd03a3d9bee99f34469
+    digest: sha256:94fc9238293e010df48fb4fff628f9137705f49eccf5c71db4c89ef87076ad32
