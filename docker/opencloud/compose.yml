@@ -19,6 +19,10 @@ services:
       PROXY_TLS: "false"
       OC_INSECURE: "true"
 
+      # Other NAS services write into the POSIX user tree. Keep OpenCloud's
+      # checksums and metadata in sync with those external filesystem changes.
+      STORAGE_USERS_POSIX_WATCH_FS: "true"
+
       PROXY_ENABLE_BASIC_AUTH: "false"
       IDM_CREATE_DEMO_USERS: "false"
       # IDM_ADMIN_PASSWORD: "admin"
