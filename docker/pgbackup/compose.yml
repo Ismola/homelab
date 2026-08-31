@@ -65,7 +65,7 @@ services:
     #   - postgres
     environment:
       <<: [*db-environment, *backup-environment]
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres-db.elver-chicken.ts.net}
+      POSTGRES_HOST: postgres-db.elver-chicken.ts.net
       POSTGRES_EXTRA_OPTS: --blobs --format=custom --quote-all-identifiers
       BACKUP_SUFFIX: .backup
       BACKUP_ON_START: true
