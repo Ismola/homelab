@@ -55,6 +55,7 @@ services:
       NOTIFICATIONS_SMTP_ENCRYPTION: "${SMTP_TRANSPORT_ENCRYPTION:-none}"
       # PROXY_CSP_CONFIG_FILE_LOCATION: /etc/opencloud/csp.yaml
 
+      OCDAV_ALLOW_PROPFIND_DEPTH_INFINITY: "true"
       # enable to allow using the banned passwords list
       # OC_PASSWORD_POLICY_BANNED_PASSWORDS_LIST: banned-password-list.txt
 
