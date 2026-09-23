@@ -8,7 +8,7 @@ images:
   - name: ghcr.io/ismola/asismetro-automations
     newTag: main
     newName: ghcr.io/ismola/asismetro-automations
-    digest: sha256:2cc20c30185f978104fe06ad5abd272d8467757aeed1ebd77b14695f53e3a74a
+    digest: sha256:d19cf7f595f955eb194b0e4d5fca5df7fef744980a9968d215d1a0dc31e8cbbf
   - name: ghcr.io/ismola/calendar-subscription-hub-web
     newTag: main
     newName: ghcr.io/ismola/calendar-subscription-hub-web
