@@ -6,5 +6,5 @@ include:
   - path: ./opencloud/compose.yml
   - path: ./duplicati/compose.yml
   - path: ./gickup/compose.yml
-  - path: ./pgbackup/compose.yml
+  # - path: ./pgbackup/compose.yml
   - path: ./minio/compose.yml
