@@ -1,5 +1,3 @@
-version: "3.8"
-
 x-common:
   database: &db-environment
     POSTGRES_DB: ${DAVINCI_DB}
