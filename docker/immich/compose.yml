@@ -4,6 +4,17 @@ services:
   immich-server:
     container_name: immich_server
     image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    # RKMPP hardware transcoding for the Rockchip RK3588 in the UGREEN DH4300 Plus.
+    security_opt:
+      - systempaths=unconfined
+      - apparmor=unconfined
+    group_add:
+      - video
+    devices:
+      - /dev/rga:/dev/rga
+      - /dev/dri:/dev/dri
+      - /dev/dma_heap:/dev/dma_heap
+      - /dev/mpp_service:/dev/mpp_service
     volumes:
       - /volume1/Photos:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro
@@ -27,12 +38,19 @@ services:
 
   immich-machine-learning:
     container_name: immich_machine_learning
+    platform: linux/arm64
     image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}-rknn
+    # RKNN inference on the RK3588 NPU.
+    security_opt:
+      - systempaths=unconfined
+      - apparmor=unconfined
+    devices:
+      - /dev/dri:/dev/dri
     volumes:
       - ${DOCKER_PATH}/immich/model-cache:/cache
     restart: always
     environment:
-      MACHINE_LEARNING_RKNN_THREADS: 3
+      MACHINE_LEARNING_RKNN_THREADS: 2
 
   redis:
     container_name: immich_redis
