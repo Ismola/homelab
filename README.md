@@ -53,7 +53,6 @@ flowchart TB
         compose_opencloud["opencloud<br/>opencloud"]
         compose_duplicati["duplicati<br/>duplicati"]
         compose_gickup["gickup<br/>gickup"]
-        compose_pgbackup["pgbackup<br/>pgbackups"]
         compose_minio["minio<br/>minio"]
     end
 
