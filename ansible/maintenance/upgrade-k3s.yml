@@ -1,0 +1,29 @@
+---
+# La versión objetivo se declara como k3s_version en el inventario. Para
+# cambios de minor, ejecutar una vez por cada minor intermedia soportada.
+- name: Cargar el token existente sin persistirlo en el repositorio
+  hosts: "server[0]"
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Leer el token efectivo del primer servidor
+      ansible.builtin.command:
+        argv:
+          - cut
+          - "-d:"
+          - "-f4"
+          - /var/lib/rancher/k3s/server/node-token
+      register: existing_k3s_token
+      changed_when: false
+      no_log: true
+
+    - name: Compartir el token en memoria con los nodos de esta ejecución
+      ansible.builtin.set_fact:
+        token: "{{ existing_k3s_token.stdout }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['k3s_cluster'] }}"
+      no_log: true
+
+- name: Actualizar K3s con la colección oficial k3s-ansible
+  ansible.builtin.import_playbook: k3s.orchestration.upgrade

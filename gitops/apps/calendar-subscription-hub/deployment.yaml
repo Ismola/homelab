@@ -24,12 +24,6 @@ data:
   ASISMETRO_API_BASE_URL: "http://asismetro-automations:3000"
   ASISMETRO_REQUEST_TIMEOUT_MS: "90000"
 
-  APP_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
-  SESSION_SECRET: "dev-session-secret"
-
-  ASISMETRO_BEARER_TOKEN: "sample"
-  VALID_TOKEN: "sample"
-
   DEFAULT_REFRESH_MINUTES: "360"
   STAGE: "production"
 
@@ -137,8 +131,8 @@ spec:
                   key: STAGE
             - name: VALID_TOKEN
               valueFrom:
-                configMapKeyRef:
-                  name: calendar-subscription-hub-config
+                secretKeyRef:
+                  name: calendar-subscription-hub-app
                   key: VALID_TOKEN
             - name: PYTHONUNBUFFERED
               value: "1"
@@ -267,6 +261,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: calendar-subscription-hub-config
+            - secretRef:
+                name: calendar-subscription-hub-app
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -340,6 +336,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: calendar-subscription-hub-config
+            - secretRef:
+                name: calendar-subscription-hub-app
           env:
             - name: DATABASE_URL
               valueFrom:

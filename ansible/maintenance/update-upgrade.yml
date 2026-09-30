@@ -1264,7 +1264,10 @@
     drain_timeout: 45m
     drain_operation_timeout_seconds: 3000
     node_ready_timeout: 30m
-    workload_ready_timeout: 20m
+    # Un rollout sano responde de inmediato. Cinco minutos permiten absorber
+    # reprogramaciones normales sin ocultar durante demasiado tiempo un
+    # CrashLoopBackOff o una incompatibilidad real de kernel/aplicación.
+    workload_ready_timeout: 5m
     cluster_settle_seconds: 30
     k3s_pod_cidr: 10.42.0.0/16
     k3s_forward_rule_comment: allow-k3s-pod-forwarding
@@ -1289,6 +1292,10 @@
     async_poll_seconds: 30
     reboot_timeout_seconds: 3600
     maintenance_always_reboot: true
+    # Permite reanudar una ejecución completa sin repetir nodos cuya ronda ya
+    # terminó y fue validada. Se pasa expresamente con -e; por defecto no omite
+    # ninguno y las comprobaciones globales finales siguen cubriendo el clúster.
+    maintenance_skip_hosts: []
 
     minimum_root_free_mb: 5120
     minimum_var_free_mb: 3072
@@ -1340,6 +1347,10 @@
         fail_msg: >-
           No se completaron el lock y el snapshot. Ejecuta el playbook completo
           sin --limit.
+
+    - name: Omitir un nodo ya completado al reanudar una ejecución
+      ansible.builtin.meta: end_host
+      when: inventory_hostname in maintenance_skip_hosts
 
     - name: Saltar nodos anteriores al punto de reanudación
       ansible.builtin.meta: end_host
@@ -3272,6 +3283,59 @@
           when:
             - maintenance_swap_needed | bool
             - final_swapoff.rc | default(1) == 0
+
+        - name: Comprobar el kernel compatible configurado para el nodo
+          ansible.builtin.stat:
+            path: "/boot/vmlinuz-{{ maintenance_preferred_kernel }}"
+          register: preferred_kernel_image
+          when: maintenance_preferred_kernel | default('') | length > 0
+
+        - name: Exigir que exista el kernel compatible configurado
+          ansible.builtin.assert:
+            that:
+              - preferred_kernel_image.stat.exists
+            fail_msg: >-
+              No existe /boot/vmlinuz-{{ maintenance_preferred_kernel }}.
+              Se evita reiniciar para no arrancar un kernel incompatible.
+          when: maintenance_preferred_kernel | default('') | length > 0
+
+        - name: Conservar instalado el kernel compatible configurado
+          ansible.builtin.command:
+            argv:
+              - apt-mark
+              - manual
+              - "linux-image-{{ maintenance_preferred_kernel }}"
+          register: preferred_kernel_manual
+          changed_when: >-
+            'set to manually installed' in preferred_kernel_manual.stdout
+          when: maintenance_preferred_kernel | default('') | length > 0
+
+        - name: Permitir que GRUB recuerde una entrada compatible
+          ansible.builtin.lineinfile:
+            path: /etc/default/grub
+            regexp: '^GRUB_DEFAULT='
+            line: 'GRUB_DEFAULT=saved'
+          register: preferred_kernel_grub_config
+          when: maintenance_preferred_kernel | default('') | length > 0
+
+        - name: Regenerar GRUB para el kernel compatible
+          ansible.builtin.command:
+            argv:
+              - update-grub
+          changed_when: true
+          when:
+            - maintenance_preferred_kernel | default('') | length > 0
+            - preferred_kernel_grub_config.changed
+
+        - name: Seleccionar persistentemente el kernel compatible
+          ansible.builtin.command:
+            argv:
+              - grub-set-default
+              - >-
+                Advanced options for Ubuntu>Ubuntu, with Linux
+                {{ maintenance_preferred_kernel }}
+          changed_when: true
+          when: maintenance_preferred_kernel | default('') | length > 0
 
         - name: Reiniciar el nodo tras las actualizaciones
           ansible.builtin.reboot:
