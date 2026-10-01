@@ -1,6 +1,8 @@
 ---
 # La versión objetivo se declara como k3s_version en el inventario. Para
-# cambios de minor, ejecutar una vez por cada minor intermedia soportada.
+# cambios de minor, ejecutar una vez por cada minor intermedia soportada. Se
+# puede pasar cada versión intermedia con `-e k3s_version=...`; el inventario
+# conserva siempre la versión final deseada.
 - name: Cargar el token existente sin persistirlo en el repositorio
   hosts: "server[0]"
   gather_facts: false
