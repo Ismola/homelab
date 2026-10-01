@@ -252,6 +252,10 @@ spec:
       labels:
         app: calendar-subscription-hub-web
     spec:
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       containers:
         - name: web
           image: ghcr.io/ismola/calendar-subscription-hub-web:main
@@ -329,6 +333,10 @@ spec:
       labels:
         app: calendar-subscription-hub-worker
     spec:
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       containers:
         - name: worker
           image: ghcr.io/ismola/calendar-subscription-hub-worker:main
