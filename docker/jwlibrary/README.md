@@ -19,6 +19,8 @@ Revisa las copias cada 30 segundos, espera al menos 10 segundos sin cambios y el
 
 Exporta únicamente notas, con el título en el nombre del archivo y como H1. Las etiquetas aparecen como `#tag` al comienzo del cuerpo; sus espacios se convierten en `_`. No publica imágenes, playlists, subrayados ni índices.
 
+Los nombres de archivo se normalizan a ASCII sin tildes ni puntuación inicial y se protegen los nombres reservados de Windows. El H1 y el contenido conservan el texto original. Los duplicados reciben `(1)`, `(2)`, etc., ligados al GUID de JW Library. El registro `${DOCKER_PATH}/jwlibrary-notes-sync/state/filenames.json` conserva los números asignados incluso cuando se borran notas; no se renumeran ni se reutilizan. Conserva `/state` entre despliegues.
+
 **El destino es exclusivo del servicio: se reemplaza todo su contenido, incluyendo archivos manuales, archivos ocultos y subcarpetas.** Los cambios manuales se detectan en las revisiones y se sustituyen por el contenido de la copia, incluso si esta no ha cambiado. Al arrancar se vuelve a exportar. Una copia válida sin notas deja el destino vacío.
 
 La copia se valida y se extrae fuera del destino antes de sustituirlo. Si falla la extracción, el destino permanece intacto. La recuperación de una publicación interrumpida utiliza `/state`; no elimines ese estado mientras el servicio trabaja. El cambio de todo el directorio no es atómico y puede observarse contenido parcial durante la publicación.
