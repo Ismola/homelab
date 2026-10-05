@@ -1,0 +1,14 @@
+services:
+  jwlibrary-notes-sync:
+    image: ghcr.io/ismola/jwlibrary-notes-sync:latest
+    container_name: jwlibrary-notes-sync
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      TZ: Europe/Madrid
+      POLL_INTERVAL_SECONDS: "30"
+      SETTLE_SECONDS: "10"
+    volumes:
+      - "${JWLIBRARY_BACKUPS_PATH:-/volume1/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/4 Archives/Backup/Jw Library}:/backups:ro"
+      - "${JWLIBRARY_NOTES_PATH:-/volume1/Archivos/opencloud/storage/users/users/934c2b07-76cc-49eb-8738-fc4ed171f4f3/3 Resources/Notas JW}:/notes"
+      - "${DOCKER_PATH}/jwlibrary-notes-sync/state:/state"

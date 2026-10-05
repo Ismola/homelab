@@ -54,6 +54,7 @@ flowchart TB
         compose_duplicati["duplicati<br/>duplicati"]
         compose_gickup["gickup<br/>gickup"]
         compose_minio["minio<br/>minio"]
+        compose_jwlibrary["jwlibrary<br/>jwlibrary-notes-sync"]
     end
 
     subgraph k3s_deployments["Aplicaciones GitOps · K3s"]

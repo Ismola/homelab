@@ -8,3 +8,4 @@ include:
   - path: ./gickup/compose.yml
   # - path: ./pgbackup/compose.yml
   - path: ./minio/compose.yml
+  - path: ./jwlibrary/compose.yml
