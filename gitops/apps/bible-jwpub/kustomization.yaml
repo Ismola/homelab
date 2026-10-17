@@ -11,4 +11,4 @@ images:
 - name: ghcr.io/ismola/bible-jwpub
   newTag: main
   newName: ghcr.io/ismola/bible-jwpub
-  digest: sha256:d9a77e4dde877c9f44dad394b8d47e850bc37256d0e72b016085d0dc7503951a
+  digest: sha256:b395e863c8e669919859003f58c89dde14b2b6f39439b0de20c8c78d20518466
