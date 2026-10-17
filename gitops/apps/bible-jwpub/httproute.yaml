@@ -9,7 +9,7 @@ spec:
       name: traefik
       namespace: gateway-system
   hostnames:
-    - bible-jwpub.ismola.dev
+    - bibles-jwpub.ismola.dev
   rules:
     - matches:
         - path:
