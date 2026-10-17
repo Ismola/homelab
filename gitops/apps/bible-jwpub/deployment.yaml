@@ -8,8 +8,6 @@ spec:
   replicas: 1
   revisionHistoryLimit: 2
   progressDeadlineSeconds: 600
-  # One pod owns the SQLite database and its RWO volume; no overlapping writers
-  # during an upgrade. The worker itself can run two conversion threads.
   strategy:
     type: Recreate
   selector:
@@ -23,7 +21,7 @@ spec:
       terminationGracePeriodSeconds: 120
       automountServiceAccountToken: false
       nodeSelector:
-        capability.isma.dev/stable: "true"
+        capability.isma.dev/stable: 'true'
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -32,157 +30,126 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
-      initContainers:
-        - name: source
-          image: python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
-          command: [python, /bootstrap/bootstrap.py]
-          env:
-            - name: SOURCE_REVISION
-              value: 62764c6065efe51deac0b628f3afb75477b4dc64
-            - name: PYTHONDONTWRITEBYTECODE
-              value: "1"
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-              ephemeral-storage: 256Mi
-            limits:
-              cpu: "1"
-              memory: 512Mi
-              ephemeral-storage: 1Gi
-          volumeMounts:
-            - name: runtime
-              mountPath: /runtime
-            - name: bootstrap
-              mountPath: /bootstrap
-              readOnly: true
-            - name: tmp
-              mountPath: /tmp
       containers:
-        - name: web
-          image: python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
-          workingDir: /runtime/source
-          command: [python, -m, uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --no-access-log]
-          ports:
-            - name: http
-              containerPort: 8000
-          env:
-            - name: PYTHONPATH
-              value: /runtime/source:/runtime/site
-            - name: PYTHONDONTWRITEBYTECODE
-              value: "1"
-            - name: DATA_DIR
-              value: /data
-            - name: AUTO_IMPORT
-              value: "true"
-            - name: MAX_UPLOAD_MB
-              value: "30"
-            - name: UPLOAD_TTL_HOURS
-              value: "24"
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          startupProbe:
-            httpGet:
-              path: /healthz
-              port: http
-            periodSeconds: 3
-            failureThreshold: 40
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: http
-            periodSeconds: 10
-            timeoutSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: http
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 4
-          resources:
-            requests:
-              cpu: 25m
-              memory: 96Mi
-              ephemeral-storage: 64Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
-              ephemeral-storage: 512Mi
-          volumeMounts:
-            - name: runtime
-              mountPath: /runtime
-              readOnly: true
-            - name: data
-              mountPath: /data
-            - name: tmp
-              mountPath: /tmp
-        - name: worker
-          image: python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
-          workingDir: /runtime/source
-          command: [python, -m, app.worker]
-          env:
-            - name: PYTHONPATH
-              value: /runtime/source:/runtime/site
-            - name: PYTHONDONTWRITEBYTECODE
-              value: "1"
-            - name: PYTHONUNBUFFERED
-              value: "1"
-            - name: DATA_DIR
-              value: /data
-            - name: WORKER_CONCURRENCY
-              value: "2"
-            - name: AUTO_IMPORT
-              value: "true"
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          livenessProbe:
-            exec:
-              command:
-                - python
-                - -c
-                - "import os,time; assert time.time()-os.stat('/data/worker-heartbeat').st_mtime<180"
-            initialDelaySeconds: 90
-            periodSeconds: 60
-            failureThreshold: 3
-          resources:
-            requests:
-              cpu: 150m
-              memory: 256Mi
-              ephemeral-storage: 64Mi
-            limits:
-              cpu: "1"
-              memory: 1536Mi
-              ephemeral-storage: 512Mi
-          volumeMounts:
-            - name: runtime
-              mountPath: /runtime
-              readOnly: true
-            - name: data
-              mountPath: /data
-            - name: tmp
-              mountPath: /tmp
-      volumes:
+      - name: web
+        image: ghcr.io/ismola/bible-jwpub:main
+        workingDir: /app
+        command:
+        - python
+        - -m
+        - uvicorn
+        - app.main:app
+        - --host
+        - 0.0.0.0
+        - --port
+        - '8000'
+        - --no-access-log
+        ports:
+        - name: http
+          containerPort: 8000
+        env:
+        - name: PYTHONDONTWRITEBYTECODE
+          value: '1'
+        - name: DATA_DIR
+          value: /data
+        - name: AUTO_IMPORT
+          value: 'true'
+        - name: MAX_UPLOAD_MB
+          value: '30'
+        - name: UPLOAD_TTL_HOURS
+          value: '24'
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 3
+          failureThreshold: 40
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 4
+        resources:
+          requests:
+            cpu: 25m
+            memory: 96Mi
+            ephemeral-storage: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+            ephemeral-storage: 512Mi
+        volumeMounts:
         - name: data
-          persistentVolumeClaim:
-            claimName: bible-jwpub-data
-        - name: runtime
-          emptyDir:
-            sizeLimit: 1Gi
+          mountPath: /data
         - name: tmp
-          emptyDir:
-            sizeLimit: 512Mi
-        - name: bootstrap
-          configMap:
-            name: bible-jwpub-bootstrap
+          mountPath: /tmp
+        imagePullPolicy: Always
+      - name: worker
+        image: ghcr.io/ismola/bible-jwpub:main
+        workingDir: /app
+        command:
+        - python
+        - -m
+        - app.worker
+        env:
+        - name: PYTHONDONTWRITEBYTECODE
+          value: '1'
+        - name: PYTHONUNBUFFERED
+          value: '1'
+        - name: DATA_DIR
+          value: /data
+        - name: WORKER_CONCURRENCY
+          value: '2'
+        - name: AUTO_IMPORT
+          value: 'true'
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - import os,time; assert time.time()-os.stat('/data/worker-heartbeat').st_mtime<180
+          initialDelaySeconds: 90
+          periodSeconds: 60
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 150m
+            memory: 256Mi
+            ephemeral-storage: 64Mi
+          limits:
+            cpu: '1'
+            memory: 1536Mi
+            ephemeral-storage: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+        imagePullPolicy: Always
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: bible-jwpub-data
+      - name: tmp
+        emptyDir:
+          sizeLimit: 512Mi

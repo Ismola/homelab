@@ -16,5 +16,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: bible-jwpub
+        - group: ""
+          kind: Service
+          name: bible-jwpub
           port: 80
+          weight: 1

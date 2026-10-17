@@ -207,6 +207,10 @@ data:
             - JW Hitster:
                 - icon: mdi-music-circle
                   href: https://jw-hitster.ismola.dev/es
+            - Bibles JWPUB:
+                - icon: mdi-book-open-page-variant
+                  href: https://bibles-jwpub.ismola.dev
+                  description: Añade otras Biblias a JW Library
             - Zip Hider:
                 - icon: mdi-folder-zip
                   href: https://zip-hider.ismola.dev
