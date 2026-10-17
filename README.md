@@ -62,7 +62,6 @@ flowchart TB
         gitops_apple_concept["apple-concept"]
         gitops_argocd["argocd"]
         gitops_argocd_image_updater["argocd-image-updater"]
-        gitops_bible_jwpub["bible-jwpub"]
         gitops_cakeshop_concept["cakeshop-concept"]
         gitops_calendar_subscription_hub["calendar-subscription-hub"]
         gitops_cloudflare["cloudflare"]

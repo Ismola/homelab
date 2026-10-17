@@ -174,12 +174,3 @@ spec:
           manifestTargets:
             kustomize:
               name: ghcr.io/ismola/open-date
-
-    - namePattern: bible-jwpub
-      useAnnotations: false
-      images:
-        - alias: biblejwpub
-          imageName: ghcr.io/ismola/bible-jwpub:main
-          manifestTargets:
-            kustomize:
-              name: ghcr.io/ismola/bible-jwpub
