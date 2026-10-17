@@ -1,6 +1,6 @@
 # BibleShelf
 
-Acceso privado: https://biblias.elver-chicken.ts.net (Tailscale).
+Acceso público HTTPS: https://biblias.elver-chicken.ts.net (Tailscale Funnel).
 Acceso público previsto: https://biblias.ismola.dev (requiere DNS/túnel Cloudflare).
 
  [código y documentación](https://github.com/Ismola/bible-jwpub).
