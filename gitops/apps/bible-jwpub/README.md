@@ -1,6 +1,9 @@
 # BibleShelf
 
-https://biblias.ismola.dev — [código y documentación](https://github.com/Ismola/bible-jwpub).
+Acceso privado: https://biblias.elver-chicken.ts.net (Tailscale).
+Acceso público previsto: https://biblias.ismola.dev (requiere DNS/túnel Cloudflare).
+
+ [código y documentación](https://github.com/Ismola/bible-jwpub).
 
 Un pod con web FastAPI y worker, PVC Longhorn de 12 GiB y Gateway HTTPRoute.
 La importación del catálogo eBible comienza automáticamente y se reanuda desde
