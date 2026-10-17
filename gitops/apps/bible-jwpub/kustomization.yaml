@@ -7,7 +7,6 @@ resources:
   - deployment.yaml
   - service.yaml
   - httproute.yaml
-  - ingress-tailscale.yaml
 configMapGenerator:
   - name: bible-jwpub-bootstrap
     files:

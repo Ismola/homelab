@@ -1,9 +1,8 @@
 # BibleShelf
 
-Acceso público HTTPS: https://biblias.elver-chicken.ts.net (Tailscale Funnel).
-Acceso público previsto: https://biblias.ismola.dev (requiere DNS/túnel Cloudflare).
+https://bible-jwpub.ismola.dev — [código y documentación](https://github.com/Ismola/bible-jwpub).
 
- [código y documentación](https://github.com/Ismola/bible-jwpub).
+Acceso exclusivamente mediante Cloudflare y Gateway HTTPRoute.
 
 Un pod con web FastAPI y worker, PVC Longhorn de 12 GiB y Gateway HTTPRoute.
 La importación del catálogo eBible comienza automáticamente y se reanuda desde
