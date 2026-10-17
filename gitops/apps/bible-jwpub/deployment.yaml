@@ -38,7 +38,7 @@ spec:
           command: [python, /bootstrap/bootstrap.py]
           env:
             - name: SOURCE_REVISION
-              value: 016324c005f048cc6c3493b95dd2fc0cf1b510d9
+              value: 3f850c9f389bee5dcd1f5522a1b925dc981d4c49
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
           securityContext:
